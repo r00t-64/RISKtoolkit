@@ -62,7 +62,8 @@ def db_select(cursor, query, ): # takes the request text and sends it to the dat
 
 """
 def funcion_sql(cursor, query, parameters=None, output_type='default'):
-    response = {"is_ok": True, "error": "", "content": None}
+    response = {"is_ok": True, "error": ""}
+    output = None
 
     try:
         # Leer la consulta SQL desde el archivo si el nombre del archivo termina en .sql
@@ -94,6 +95,7 @@ def funcion_sql(cursor, query, parameters=None, output_type='default'):
                 output = json.dumps(result_dict, ensure_ascii=False)
             else:
                 # Devolver nombres de columnas + lista de listas
+                col_names = [column[0].lower() for column in cursor.description]
                 output = [col_names] + [list(row) for row in result]
         else:
             output = []
@@ -140,14 +142,14 @@ def proceso_sql(engine, Archivo_SQL, parameters, sep=';'):
     return __response
 
 
-# def proceso_sql_string(engine, query_str: str ):
-    # __response = {"is_ok": True, "error": ""}
-    # try:
-        # engine.execute(text(query_str))
-    # except Exception as __e:
-        # __response = {"is_ok": False, "error": str(__e)}
+def proceso_sql_string(engine, query_str: str ):
+    __response = {"is_ok": True, "error": ""}
+    try:
+        engine.execute(text(query_str))
+    except Exception as __e:
+        __response = {"is_ok": False, "error": str(__e)}
 
-    # return __response
+    return __response
 
 
 
