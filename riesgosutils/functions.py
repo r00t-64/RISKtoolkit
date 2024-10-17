@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, text,types
 from datetime import datetime, timedelta
-import re,os,calendar
+import re,os,json
 import pandas as pd
 import numpy as np
 from exchangelib import Credentials, Account, Message, FileAttachment,HTMLBody
@@ -12,7 +12,7 @@ from riesgosutils.styler_html import StylerHTML
 import win32com.client
 outlook = win32com.client.Dispatch('outlook.application')
 
-
+""" 
 def db_select(cursor, query, ): # takes the request text and sends it to the data_frame
     response = {"is_ok": True, "error": "", "content":None}
 
@@ -41,26 +41,26 @@ def db_select(cursor, query, ): # takes the request text and sends it to the dat
     finally:
         return response 
 
-def execute_query_from_file(cursor, file_sql, parameters, output_type='default'):
-    with open(file_sql, 'r', encoding='latin-1') as __file:
-        __query_template = __file.read()
+    def execute_query_from_file(cursor, file_sql, parameters, output_type='default'):
+        with open(file_sql, 'r', encoding='latin-1') as __file:
+            __query_template = __file.read()
 
-    __query_str = __query_template.format(**parameters)
-    cursor.execute(__query_str)
-    __result = cursor.fetchall()
+        __query_str = __query_template.format(**parameters)
+        cursor.execute(__query_str)
+        __result = cursor.fetchall()
 
-    if __result:
-        if output_type == 'dataframe':
-            __col_names = [column[0].lower() for column in cursor.description]
-            __df = pd.DataFrame(__result, columns=__col_names)
-            return __df  
+        if __result:
+            if output_type == 'dataframe':
+                __col_names = [column[0].lower() for column in cursor.description]
+                __df = pd.DataFrame(__result, columns=__col_names)
+                return __df  
+            else:
+                __result_list = [value for row in __result for value in row]
+                return __result_list 
         else:
-            __result_list = [value for row in __result for value in row]
-            return __result_list 
-    else:
-        return []  
+            return []  
 
-
+"""
 def funcion_sql(cursor, query, parameters=None, output_type='default'):
     response = {"is_ok": True, "error": "", "content": None}
 
@@ -75,7 +75,6 @@ def funcion_sql(cursor, query, parameters=None, output_type='default'):
             if query.lower().startswith("select"):
                 query_str = query
             else:
-                #query_str = 'select * from ' + query
                 query_str = query
 
         # Ejecutar la consulta
@@ -87,18 +86,23 @@ def funcion_sql(cursor, query, parameters=None, output_type='default'):
             if output_type == 'dataframe':
                 col_names = [column[0].lower() for column in cursor.description]
                 df = pd.DataFrame(result, columns=col_names)
-                response["content"] = df
+                output = df
+            elif output_type == 'json':
+                # Convertir a formato JSON
+                col_names = [column[0].lower() for column in cursor.description]
+                result_dict = [dict(zip(col_names, row)) for row in result]
+                output = json.dumps(result_dict, ensure_ascii=False)
             else:
-                result_list = [value for row in result for value in row]
-                response["content"] = result_list
+                # Devolver nombres de columnas + lista de listas
+                output = [col_names] + [list(row) for row in result]
         else:
-            response["content"] = []
+            output = []
 
     except Exception as e:
-        response = {"is_ok": False, "error": str(e), "content": None}
+        response = {"is_ok": False, "error": str(e)}
 
     finally:
-        return response
+        return output, response
 
 def parse_query_file(Archivo_SQL):
     try: 
@@ -136,14 +140,14 @@ def proceso_sql(engine, Archivo_SQL, parameters, sep=';'):
     return __response
 
 
-def proceso_sql_string(engine, query_str: str ):
-    __response = {"is_ok": True, "error": ""}
-    try:
-        engine.execute(text(query_str))
-    except Exception as __e:
-        __response = {"is_ok": False, "error": str(__e)}
+# def proceso_sql_string(engine, query_str: str ):
+    # __response = {"is_ok": True, "error": ""}
+    # try:
+        # engine.execute(text(query_str))
+    # except Exception as __e:
+        # __response = {"is_ok": False, "error": str(__e)}
 
-    return __response
+    # return __response
 
 
 
