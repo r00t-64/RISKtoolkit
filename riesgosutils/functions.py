@@ -72,11 +72,15 @@ def funcion_sql(cursor, query, parameters=None, output_type='default'):
                 query_template = file.read()
             query_str = query_template.format(**parameters)
         else:
-            # Si es una cadena de consulta directa
-            if query.lower().startswith("select"):
-                query_str = query
+            if len(query.split()) == 1:
+                # Si la consulta tiene una sola palabra, se considera como una tabla
+                query_str = 'SELECT * FROM ' + query
             else:
-                query_str = query
+                # Para consultas que tienen más de una palabra
+                if query.lower().startswith("select"):
+                    query_str = query
+                else:
+                    query_str = query
 
         # Ejecutar la consulta
         cursor.execute(query_str)
@@ -106,36 +110,32 @@ def funcion_sql(cursor, query, parameters=None, output_type='default'):
     finally:
         return output, response
 
-def parse_query_file(Archivo_SQL):
-    try: 
-        with open(Archivo_SQL, encoding='latin-1') as sql_file: 
-            sql_str = sql_file.read()
-    except Exception as e:
-        sql_str = ""
-    finally:
-        return sql_str
-
-def proceso_sql(engine, Archivo_SQL, parameters, sep=';'):
+def proceso_sql(engine, query, parameters=None):
+    """
+    Ejecuta sentencias SQL desde un archivo (.sql) o desde una cadena directa, manejando parámetros y control de errores.
+    :param engine: Motor SQLAlchemy para ejecutar las consultas.
+    :param query: Ruta al archivo SQL o cadena de consulta SQL directa.
+    :param parameters: Diccionario de parámetros para formatear las consultas SQL.
+    :param sep: Separador para dividir múltiples consultas (por defecto ';').
+    :return: Diccionario con el estado de la ejecución.
+    """
     __response = {"is_ok": True, "error": ""}
     
     try:
-        with open(Archivo_SQL, encoding='latin-1') as file:
-            file_content = file.read()
-            if sep:
-                statements = re.split(sep, file_content, flags=re.MULTILINE)
-                try:
-                    for statement in statements:
-                        if statement.strip(): 
-                            engine.execute(text(statement.format(**parameters)))
-                except Exception as __e:
-                    print('Error en la ejecución:', str(__e))
-                    __response = {"is_ok": False, "error": str(__e)}
-            else:
-                try:
-                    engine.execute(text(file_content.format(**parameters)))
-                except Exception as __e:
-                    print('Error en la ejecución:', str(__e))
-                    __response = {"is_ok": False, "error": str(__e)}
+        if query.lower().endswith(".sql"):
+
+            filename=query
+            with open(filename,encoding='utf-8-sig') as file:
+                statements = re.split(';', file.read(), flags=re.MULTILINE)
+                for statement in statements:
+                    try:
+                        engine.execute(text(statement))
+                    except Exception as __e:
+                        print(f"Database error occurred: {str(__e)}")  
+                        continue
+        else:
+            engine.execute(text(query))
+
     except Exception as __e:
         __response = {"is_ok": False, "error": str(__e)}
     
@@ -174,7 +174,7 @@ def get_last_day_of_month(date):
     return __last_day_of_previous_month
 
 
-def send_mail_v2(subject, body, to_email, cc_email=None, attachment_paths=None, outlookacc=None, password=None, draft=False):
+def send_mail(subject, body, to_email, cc_email=None, attachment_paths=None, outlookacc=None, password=None, draft=False):
     try:
     # Verifica individualmente si alguno de los parámetros obligatorios es None
         if subject is None:
@@ -350,3 +350,13 @@ def days_in_month(date_x):
         return days_in_month
     except Exception:
         return 0
+
+
+# def parse_query_file(query):
+#     try: 
+#         with open(query, encoding='latin-1') as sql_file: 
+#             sql_str = sql_file.read()
+#     except Exception as e:
+#         sql_str = ""
+#     finally:
+#         return sql_str
