@@ -66,45 +66,42 @@ def funcion_sql(cursor, query, parameters=None, output_type='default'):
     output = None
 
     try:
-        # Leer la consulta SQL desde el archivo si el nombre del archivo termina en .sql
+        # Cargar SQL desde un archivo si el nombre del archivo termina en .sql
         if query.lower().endswith(".sql"):
             with open(query, 'r', encoding='latin-1') as file:
                 query_template = file.read()
+            # Formatear la consulta con los parámetros proporcionados
             query_str = query_template.format(**parameters)
         else:
+            # Determinar la cadena de consulta según el input
             if len(query.split()) == 1:
-                # Si la consulta tiene una sola palabra, se considera como una tabla
+                # Si la consulta es una sola palabra, se asume que es el nombre de una tabla
                 query_str = 'SELECT * FROM ' + query
             else:
-                # Para consultas que tienen más de una palabra
-                if query.lower().startswith("select"):
-                    query_str = query
-                else:
-                    query_str = query
+                # Si la consulta comienza con "select", se usa directamente
+                # De lo contrario, se considera una consulta válida completa
+                query_str = query if query.lower().startswith("select") else query
 
-        # Ejecutar la consulta
+        # Ejecutar la consulta SQL
         cursor.execute(query_str)
         result = cursor.fetchall()
+        # Obtener los nombres de las columnas
+        col_names = [column[0].lower() for column in cursor.description]
 
         # Procesar el resultado según el tipo de salida solicitado
-        if result:
-            if output_type == 'dataframe':
-                col_names = [column[0].lower() for column in cursor.description]
-                df = pd.DataFrame(result, columns=col_names)
-                output = df
-            elif output_type == 'json':
-                # Convertir a formato JSON
-                col_names = [column[0].lower() for column in cursor.description]
-                result_dict = [dict(zip(col_names, row)) for row in result]
-                output = json.dumps(result_dict, ensure_ascii=False)
-            else:
-                # Devolver nombres de columnas + lista de listas
-                col_names = [column[0].lower() for column in cursor.description]
-                output = [col_names] + [list(row) for row in result]
+        if output_type == 'dataframe':
+            # Crear un DataFrame, incluso si no hay filas (solo columnas)
+            output = pd.DataFrame(result, columns=col_names) if result else pd.DataFrame(columns=col_names)
+        elif output_type == 'json':
+            # Convertir el resultado a un diccionario y luego a formato JSON
+            result_dict = [dict(zip(col_names, row)) for row in result]
+            output = json.dumps(result_dict, ensure_ascii=False)
         else:
-            output = []
+            # Devolver nombres de columnas más las filas como lista de listas
+            output = [col_names] + [list(row) for row in result] if result else [col_names]
 
     except Exception as e:
+        # En caso de error, actualizar el mensaje en la respuesta
         response = {"is_ok": False, "error": str(e)}
 
     finally:
