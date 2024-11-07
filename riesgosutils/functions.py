@@ -6,12 +6,6 @@ import numpy as np
 from exchangelib import Credentials, Account, Message, FileAttachment,HTMLBody
 from openpyxl.styles import Font, PatternFill, Border, Alignment, numbers
 
-from riesgosutils.oracle_connection import OracleConnection
-from riesgosutils.styler_html import StylerHTML
-
-import win32com.client
-outlook = win32com.client.Dispatch('outlook.application')
-
 """ 
 def db_select(cursor, query, ): # takes the request text and sends it to the data_frame
     response = {"is_ok": True, "error": "", "content":None}
