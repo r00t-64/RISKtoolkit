@@ -10,7 +10,8 @@ setup(
         'numpy',
         'exchangelib',
         'openpyxl',
-        'cx_Oracle'
+        'cx_Oracle',
+        'boto3'
 
     ],
     author='Isaac Rivera',
