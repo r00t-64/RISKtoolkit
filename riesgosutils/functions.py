@@ -4,7 +4,6 @@ import re,os,json
 import pandas as pd
 import numpy as np
 from exchangelib import Credentials, Account, Message, FileAttachment,HTMLBody
-from openpyxl.styles import Font, PatternFill, Border, Alignment, numbers
 
 """ 
 def db_select(cursor, query, ): # takes the request text and sends it to the data_frame
@@ -211,8 +210,6 @@ def send_mail(subject, body, to_email, cc_email=None, attachment_paths=None, out
     except Exception as e:
         print(f"Error al enviar correo\n", str(e))
 
-    
-
 def insert_dataframe(engine, df, table_name, schema= "", index=False, if_exists='append'):
     __response = {"is_ok": True, "error": ""}
 
@@ -237,112 +234,6 @@ def insert_dataframe(engine, df, table_name, schema= "", index=False, if_exists=
         __response = {"is_ok": False, "error": str(__e)}
 
     return __response
-
-def split_sheet_by_categories(input_file_name, output_file_name, category):
-    """
-    Divide una hoja de Excel en múltiples hojas basadas en una columna de categoría especificada.
-
-    Parámetros:
-    - input_file_name (str): Nombre del archivo Excel de entrada.
-    - output_file_name (str): Nombre del archivo Excel de salida.
-    - category (str): Nombre de la columna de categoría por la cual dividir.
-    """
-    excel_input_filename = input_file_name
-    excel_output_filename = output_file_name
-    total_sheet_name = "TOTAL"
-    pivot_sheet_name = category
-    table_style = "Table Style Light 9"
-
-    df = pd.read_excel(excel_input_filename, engine="openpyxl")
-    columns = [{"header": column} for column in df.columns]
-
-    categories = df[pivot_sheet_name].unique()
-    categories = np.sort(categories)
-
-    writer = pd.ExcelWriter(excel_output_filename, engine="xlsxwriter")
-
-    df.to_excel(writer, sheet_name=total_sheet_name, index=False)
-    ws_total_table = writer.sheets[total_sheet_name]
-    (max_row, max_col) = df.shape
-    ws_total_table.add_table(
-        0, 0, max_row, max_col - 1, {"columns": columns, "style": table_style}
-    )
-
-    for category in categories:
-        filtered_table = df[df[pivot_sheet_name] == category]
-        filtered_table.to_excel(writer, sheet_name=str(category), index=False)
-        ws_filtered_table = writer.sheets[str(category)]
-        (max_row, max_col) = filtered_table.shape
-        ws_filtered_table.add_table(
-            0, 0, max_row, max_col - 1, {"columns": columns, "style": table_style}
-        )
-
-    writer.save()
-
-
-def copy_cell_style(source_cell, target_cell):
-    if source_cell.has_style:
-        # Copy font style
-        target_cell.font = Font(name=source_cell.font.name, size=source_cell.font.size, bold=source_cell.font.bold,
-                                italic=source_cell.font.italic, vertAlign=source_cell.font.vertAlign,
-                                underline=source_cell.font.underline, strike=source_cell.font.strike,
-                                color=source_cell.font.color)
-        
-        # Copy fill style
-        if source_cell.fill.fill_type != "none":
-            target_cell.fill = PatternFill(fill_type=source_cell.fill.fill_type, start_color=source_cell.fill.start_color,
-                                           end_color=source_cell.fill.end_color)
-        
-        # Copy border style
-        target_cell.border = Border(left=source_cell.border.left, right=source_cell.border.right, top=source_cell.border.top,
-                                    bottom=source_cell.border.bottom, diagonal=source_cell.border.diagonal,
-                                    diagonal_direction=source_cell.border.diagonal_direction,
-                                    outline=source_cell.border.outline, vertical=source_cell.border.vertical,
-                                    horizontal=source_cell.border.horizontal)
-        
-        # Copy alignment style
-        target_cell.alignment = Alignment(horizontal=source_cell.alignment.horizontal, vertical=source_cell.alignment.vertical,
-                                          text_rotation=source_cell.alignment.text_rotation, wrap_text=source_cell.alignment.wrap_text,
-                                          shrink_to_fit=source_cell.alignment.shrink_to_fit, indent=source_cell.alignment.indent)
-        
-        # Copy number format style
-        if source_cell.number_format:
-            target_cell.number_format = source_cell.number_format
-        
-        # Copy string format (if it's a string cell)
-        if source_cell.data_type == "s":
-            target_cell.value = source_cell.value
-            target_cell.data_type = "s"
-
-def copy_column_style(source_sheet, source_column, target_sheet, target_column):
-    for row in range(1, source_sheet.max_row + 1):
-        source_cell = source_sheet.cell(row=row, column=source_column)
-        target_cell = target_sheet.cell(row=row, column=target_column)
-        copy_cell_style(source_cell, target_cell)
-
-def days_in_month(date_x):
-    try:
-        if type(date_x).__name__ == 'str':
-            # Parse the input date string to a datetime object
-            __now = datetime.strptime(date_x, '%d/%m/%Y')
-
-        # Get the first day of the current month
-        first_day_of_month = datetime(__now.year, __now.month, 1)
-
-        # Calculate the first day of the next month
-        if __now.month == 12:
-            first_day_of_next_month = datetime(__now.year + 1, 1, 1)
-        else:
-            first_day_of_next_month = datetime(__now.year, __now.month + 1, 1)
-
-        # Calculate the number of days in the current month
-        days_in_month = (first_day_of_next_month - first_day_of_month).days
-
-        return days_in_month
-    except Exception:
-        return 0
-
-
 # def parse_query_file(query):
 #     try: 
 #         with open(query, encoding='latin-1') as sql_file: 
