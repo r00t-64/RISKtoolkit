@@ -45,9 +45,9 @@ class S3ConnectionMR:
             except:
                 logging.error("Could not connect to s3 with default credentials")
 
-    def read_from_s3(self, filename, nrows=None, dtype=None, encoding='utf-8'):
+    def read_from_s3(self, filename, nrows=None, dtype=None, usecols = None, encoding='utf-8'):
         response = self.s3_client.get_object(Bucket=self.bucket, Key=filename)
-        df = pd.read_csv(response.get("Body"), encoding=encoding, nrows=nrows, dtype=dtype)
+        df = pd.read_csv(response.get("Body"), encoding=encoding, nrows=nrows, dtype=dtype, usecols= usecols)
         logging.info(
             "The file {} has been loaded and has this shape {}".format(
                 filename, df.shape
