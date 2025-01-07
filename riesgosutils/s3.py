@@ -48,11 +48,11 @@ class S3ConnectionMR:
     def read_from_s3(self, filename, nrows=None, dtype=None, usecols = None, chunksize=  None , encoding='utf-8'):
         response = self.s3_client.get_object(Bucket=self.bucket, Key=filename)
         df = pd.read_csv(response.get("Body"), encoding=encoding, nrows=nrows, dtype=dtype, usecols= usecols, chunksize=chunksize)
-        logging.info(
-            "The file {} has been loaded and has this shape {}".format(
-                filename, df.shape
-            )
-        )
+        # logging.info(
+        #     "The file {} has been loaded and has this shape {}".format(
+        #         filename, df.shape
+        #     )
+        # )
         return df
 
     def load_from_s3(self, filename, nrows=None):
