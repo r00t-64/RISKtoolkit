@@ -13,9 +13,10 @@ from boto3.dynamodb.conditions import Key
 
 logging.getLogger().setLevel(logging.INFO)
 class S3ConnectionMR:
-    def __init__(self, bucket=None, client_secret=None):
+    def __init__(self, bucket=None, client_secret=None, base_path = None):
         self.bucket = bucket
         self.s3_client = self.get_client(client_secret)
+        self.base_path = base_path
 
     @staticmethod
     def get_client(client_secret=None):

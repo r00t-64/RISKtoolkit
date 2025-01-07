@@ -54,7 +54,7 @@ def db_select(cursor, query, ): # takes the request text and sends it to the dat
             return []  
 
 """
-def funcion_sql(cursor, query, parameters=None, output_type='default'):
+def funcion_sql(cursor, query, parameters=None, output_type='dataframe'):
     response = {"is_ok": True, "error": ""}
     output = None
 
