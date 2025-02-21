@@ -11,10 +11,9 @@ Coleccion de clases y funciones recurrentes para el Departamento de Riesgos.
 
 # 1️⃣ Inicialización y conexión a una tabla
 ```python
-db = DynamoDBConnection()  ```
-# Inicializa sin tabla específica
-db.connect_table("MiTabla")  ```
-# Conectar a una tabla específica
+db = DynamoDBConnection("../credenciales.json") 
+db.connect_table("MiTabla") 
+
 ```
 # 2️⃣ Insertar un ítem (put_item)
 ```python
