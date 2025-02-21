@@ -1,5 +1,7 @@
 from setuptools import setup, find_packages
 
+with open("README.md", encoding="utf-8") as f:
+    long_description = f.read()
 setup(
     name='riesgosutils',
     version='0.1.2',
@@ -17,7 +19,7 @@ setup(
     author='Isaac Rivera',
     author_email='ariveras@cajaarequipa.pe',
     description='Coleccion de clases y funciones recurrentes para el Departamento de Riesgos.',
-    long_description=open('README.md').read(),
+    long_description=long_description,
     long_description_content_type='text/markdown',
     url='https://github.com/',
     classifiers=[
