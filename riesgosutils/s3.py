@@ -119,11 +119,16 @@ class S3ConnectionMR:
         self.s3_client.download_file(self.bucket, key, file)
 
 
+import boto3
+import json
+import logging
+from botocore.exceptions import ClientError
+from boto3.dynamodb.conditions import Key
+
 class DynamoDBConnection:
-    def __init__(self, table_name, client_secret="./secret/client_secret.json"):
-        self.table_name = table_name
+    def __init__(self, client_secret="./secret/client_secret.json"):
         self.dynamodb = self.get_client(client_secret)
-        self.table = self.dynamodb.Table(table_name)
+        self.table = None
 
     @staticmethod
     def get_client(client_secret="client_secret.json"):
@@ -137,39 +142,51 @@ class DynamoDBConnection:
                     'dynamodb',
                     aws_access_key_id=ACCESS_KEY,
                     aws_secret_access_key=SECRET_KEY,
-                    verify=False,
                     region_name='us-east-1'  # Cambia a tu región de AWS
                 )
                 return dynamodb
         except Exception as e:
             logging.error(f"DynamoDB client not loaded: {str(e)}")
             return None
-
-    # Create or update item
+    
+    def connect_table(self, table_name):
+        if self.dynamodb:
+            self.table = self.dynamodb.Table(table_name)
+            logging.info(f"Connected to table {table_name}")
+        else:
+            logging.error("DynamoDB client is not initialized.")
+    
     def put_item(self, item):
+        if not self.table:
+            logging.error("No table connected.")
+            return None
         try:
             response = self.table.put_item(Item=item)
-            logging.info(f"Item successfully put in table {self.table_name}")
+            logging.info(f"Item successfully put in table {self.table.name}")
             return response
         except ClientError as e:
-            logging.error(f"Error putting item in table {self.table_name}: {str(e)}")
-
-    # Read item by key
+            logging.error(f"Error putting item in table {self.table.name}: {str(e)}")
+    
     def get_item(self, key):
+        if not self.table:
+            logging.error("No table connected.")
+            return None
         try:
             response = self.table.get_item(Key=key)
             if 'Item' in response:
-                logging.info(f"Item retrieved from {self.table_name}: {response['Item']}")
+                logging.info(f"Item retrieved from {self.table.name}: {response['Item']}")
                 return response['Item']
             else:
-                logging.warning(f"Item not found in {self.table_name} for key: {key}")
+                logging.warning(f"Item not found in {self.table.name} for key: {key}")
                 return None
         except ClientError as e:
-            logging.error(f"Error retrieving item from table {self.table_name}: {str(e)}")
+            logging.error(f"Error retrieving item from table {self.table.name}: {str(e)}")
             return None
-
-    # Update item
+    
     def update_item(self, key, update_expression, expression_values):
+        if not self.table:
+            logging.error("No table connected.")
+            return None
         try:
             response = self.table.update_item(
                 Key=key,
@@ -177,23 +194,27 @@ class DynamoDBConnection:
                 ExpressionAttributeValues=expression_values,
                 ReturnValues="UPDATED_NEW"
             )
-            logging.info(f"Item updated in {self.table_name}: {response['Attributes']}")
+            logging.info(f"Item updated in {self.table.name}: {response['Attributes']}")
             return response['Attributes']
         except ClientError as e:
-            logging.error(f"Error updating item in table {self.table_name}: {str(e)}")
+            logging.error(f"Error updating item in table {self.table.name}: {str(e)}")
             return None
-
-    # Delete item by key
+    
     def delete_item(self, key):
+        if not self.table:
+            logging.error("No table connected.")
+            return None
         try:
             response = self.table.delete_item(Key=key)
-            logging.info(f"Item successfully deleted from {self.table_name}")
+            logging.info(f"Item successfully deleted from {self.table.name}")
             return response
         except ClientError as e:
-            logging.error(f"Error deleting item from table {self.table_name}: {str(e)}")
-
-    # Scan table (optional: use filters)
+            logging.error(f"Error deleting item from table {self.table.name}: {str(e)}")
+    
     def scan_table(self, filter_expression=None, expression_values=None, limit=None):
+        if not self.table:
+            logging.error("No table connected.")
+            return []
         try:
             scan_params = {}
             if filter_expression:
@@ -204,21 +225,23 @@ class DynamoDBConnection:
             
             response = self.table.scan(**scan_params)
             items = response.get('Items', [])
-            logging.info(f"Scanned {len(items)} items from {self.table_name} with a limit of {limit}")
+            logging.info(f"Scanned {len(items)} items from {self.table.name} with a limit of {limit}")
             return items
         except ClientError as e:
-            logging.error(f"Error scanning table {self.table_name}: {str(e)}")
+            logging.error(f"Error scanning table {self.table.name}: {str(e)}")
             return []
         
-
     def query_table(self, partition_key, partition_value):
+        if not self.table:
+            logging.error("No table connected.")
+            return []
         try:
             response = self.table.query(
                 KeyConditionExpression=Key(partition_key).eq(partition_value)
             )
             items = response.get('Items', [])
-            logging.info(f"Queried {len(items)} items from {self.table_name}")
+            logging.info(f"Queried {len(items)} items from {self.table.name}")
             return items
         except ClientError as e:
-            logging.error(f"Error querying table {self.table_name}: {str(e)}")
+            logging.error(f"Error querying table {self.table.name}: {str(e)}")
             return []

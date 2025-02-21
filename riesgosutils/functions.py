@@ -225,10 +225,14 @@ def insert_dataframe(engine, df, table_name, schema= "", index=False, if_exists=
                 __column_types[__col] = types.Float
             elif __dtype == 'datetime64[ns]':
                 __column_types[__col] = types.Date
-
+            else:
+                __column_types[__col] = types.VARCHAR(length=255)
+            if df[__col].isna().all():
+                __column_types[__col] = types.VARCHAR(length=255)
+                
         if not index:
             df = df.reset_index(drop=True)
-        df.to_sql(con = engine, schema= schema, name= table_name, dtype=__column_types, if_exists=if_exists, index=False, chunksize=1000)
+        df.to_sql(con = engine, schema= schema, name= table_name.lower(), dtype=__column_types, if_exists=if_exists, index=False, chunksize=1000)
     
     except Exception as __e:
         __response = {"is_ok": False, "error": str(__e)}
