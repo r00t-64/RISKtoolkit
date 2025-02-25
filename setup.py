@@ -14,7 +14,8 @@ setup(
         'openpyxl',
         'cx_Oracle',
         'boto3',
-        'pyspark'
+        'pyspark',
+        'delta-spark'
 
     ],
     author='Isaac Rivera',
