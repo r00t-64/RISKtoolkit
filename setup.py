@@ -15,7 +15,9 @@ setup(
         'cx_Oracle',
         'boto3',
         'pyspark',
-        'delta-spark'
+        'delta-spark',
+        'pyarrow',
+        'fastparquet'
 
     ],
     author='Isaac Rivera',
