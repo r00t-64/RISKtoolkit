@@ -47,10 +47,11 @@ class S3ConnectionMR:
             except:
                 logging.error("Could not connect to s3 with default credentials")
 
-    def read_from_s3(self, filename, engine=None, encoding='utf-8', format='csv', header=True):
+    def read_from_s3(self, filename, engine=None, nrows=None, dtype=None, usecols = None, chunksize=  None , encoding='utf-8', header=True):
         response = self.s3_client.get_object(Bucket=self.bucket, Key=filename)
         if engine is None:
-            return pd.read_csv(response.get("Body"), encoding=encoding)
+            df = pd.read_csv(response.get("Body"), encoding=encoding, nrows=nrows, dtype=dtype, usecols= usecols, chunksize=chunksize)
+            return df
         elif isinstance(engine, SparkSession):
             return engine.read.option("header", header).csv(response.get("Body")) if format == 'csv' else engine.read.parquet(response.get("Body"))
         else:
