@@ -4,7 +4,7 @@ import logging
 import json
 import tempfile
 
-from io import StringIO
+import io
 from botocore.exceptions import ClientError
 from boto3.s3.transfer import TransferConfig
 from boto3.dynamodb.conditions import Key
@@ -47,13 +47,13 @@ class S3ConnectionMR:
             except:
                 logging.error("Could not connect to s3 with default credentials")
 
-    def read_from_s3(self, filename, engine=None, nrows=None, dtype=None, usecols = None, chunksize=  None , encoding='utf-8', header=True):
+    def read_from_s3(self, filename, engine=None, nrows=None, dtype=None, usecols=None, chunksize=None, encoding='utf-8', header=True):
         response = self.s3_client.get_object(Bucket=self.bucket, Key=filename)
         if engine is None:
-            df = pd.read_csv(response.get("Body"), encoding=encoding, nrows=nrows, dtype=dtype, usecols= usecols, chunksize=chunksize)
+            df = pd.read_csv(response.get("Body"), encoding=encoding, nrows=nrows, dtype=dtype, usecols=usecols, chunksize=chunksize)
             return df
         elif isinstance(engine, SparkSession):
-            return engine.read.option("header", header).csv(response.get("Body")) if format == 'csv' else engine.read.parquet(response.get("Body"))
+            return engine.read.option("header", header).csv(response.get("Body"))
         else:
             raise ValueError("Invalid engine type. Use None for pandas or pass a SparkSession object for PySpark.")
 
@@ -62,13 +62,19 @@ class S3ConnectionMR:
 
         return response.get("body")
 
-    def df_to_s3(self, df=None, key=None):
-        csv_buffer = StringIO()
-        df.to_csv(csv_buffer, index=False)
-        self.s3_client.put_object(
-            Body=csv_buffer.getvalue(), Bucket=self.bucket, Key=key
-        )
-
+    def df_to_s3(self, df=None, key=None, format = 'parquet'):
+        if format == 'csv':
+            buffer = io.StringIO()
+            df.to_csv(buffer, index=False)
+        elif format == 'parquet':
+            buffer = io.BytesIO()
+            df.to_parquet(buffer, index=False)
+        else:
+            raise ValueError("Unsupported format. Use 'csv' or 'parquet'.")
+        
+        buffer.seek(0)
+        self.s3_client.put_object(Body=buffer.getvalue(), Bucket=self.bucket, Key=key)
+        
         logging.info(f"File with {df.shape[0]} rows was written to {key}")
 
     def s3_find_csv(self, path=None, suffix="csv"):
