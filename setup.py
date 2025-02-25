@@ -13,7 +13,8 @@ setup(
         'exchangelib',
         'openpyxl',
         'cx_Oracle',
-        'boto3'
+        'boto3',
+        'pyspark'
 
     ],
     author='Isaac Rivera',

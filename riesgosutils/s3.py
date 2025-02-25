@@ -8,7 +8,9 @@ from io import StringIO
 from botocore.exceptions import ClientError
 from boto3.s3.transfer import TransferConfig
 from boto3.dynamodb.conditions import Key
-
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, sum as Fsum, last_day, trunc, to_date, expr
+from delta.tables import DeltaTable
 
 
 logging.getLogger().setLevel(logging.INFO)
@@ -45,15 +47,14 @@ class S3ConnectionMR:
             except:
                 logging.error("Could not connect to s3 with default credentials")
 
-    def read_from_s3(self, filename, nrows=None, dtype=None, usecols = None, chunksize=  None , encoding='utf-8'):
+    def read_from_s3(self, filename, engine=None, encoding='utf-8', format='csv', header=True):
         response = self.s3_client.get_object(Bucket=self.bucket, Key=filename)
-        df = pd.read_csv(response.get("Body"), encoding=encoding, nrows=nrows, dtype=dtype, usecols= usecols, chunksize=chunksize)
-        # logging.info(
-        #     "The file {} has been loaded and has this shape {}".format(
-        #         filename, df.shape
-        #     )
-        # )
-        return df
+        if engine is None:
+            return pd.read_csv(response.get("Body"), encoding=encoding)
+        elif isinstance(engine, SparkSession):
+            return engine.read.option("header", header).csv(response.get("Body")) if format == 'csv' else engine.read.parquet(response.get("Body"))
+        else:
+            raise ValueError("Invalid engine type. Use None for pandas or pass a SparkSession object for PySpark.")
 
     def load_from_s3(self, filename, nrows=None):
         response = self.s3_client.get_object(Bucket=self.bucket, Key=filename)
