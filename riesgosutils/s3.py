@@ -61,7 +61,8 @@ class S3ConnectionMR:
             try:
                 df = engine.read.parquet(temp_file.name)  # Cargar en Spark
             finally:
-                os.remove(temp_file.name)  # Eliminar el archivo después de cargarlo
+                pass
+                #os.remove(temp_file.name)  # Eliminar el archivo después de cargarlo
             
             return df
         else:
