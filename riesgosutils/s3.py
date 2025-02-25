@@ -53,10 +53,11 @@ class S3ConnectionMR:
             df = pd.read_csv(response.get("Body"), encoding=encoding, nrows=nrows, dtype=dtype, usecols=usecols, chunksize=chunksize)
             return df
         elif isinstance(engine, SparkSession):
-            return engine.read.option("header", header).csv(response.get("Body"))
+            buffer = io.BytesIO(response.get("Body").read())  # Convertir la respuesta en un buffer de bytes
+            return engine.read.parquet(buffer)  # Leer como Parquet en Spark
         else:
             raise ValueError("Invalid engine type. Use None for pandas or pass a SparkSession object for PySpark.")
-
+    
     def load_from_s3(self, filename, nrows=None):
         response = self.s3_client.get_object(Bucket=self.bucket, Key=filename)
 
