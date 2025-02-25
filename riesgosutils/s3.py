@@ -4,7 +4,7 @@ import logging
 import json
 import tempfile
 
-import io
+import io,os
 from botocore.exceptions import ClientError
 from boto3.s3.transfer import TransferConfig
 from boto3.dynamodb.conditions import Key
@@ -53,8 +53,17 @@ class S3ConnectionMR:
             df = pd.read_csv(response.get("Body"), encoding=encoding, nrows=nrows, dtype=dtype, usecols=usecols, chunksize=chunksize)
             return df
         elif isinstance(engine, SparkSession):
-            buffer = io.BytesIO(response.get("Body").read())  # Convertir la respuesta en un buffer de bytes
-            return engine.read.parquet(buffer)  # Leer como Parquet en Spark
+            # Crear un archivo temporal
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".parquet")
+            temp_file.write(response.get("Body").read())  # Escribir los datos en el archivo
+            temp_file.close()  # Cerrar el archivo para que Spark pueda leerlo
+            
+            try:
+                df = engine.read.parquet(temp_file.name)  # Cargar en Spark
+            finally:
+                os.remove(temp_file.name)  # Eliminar el archivo después de cargarlo
+            
+            return df
         else:
             raise ValueError("Invalid engine type. Use None for pandas or pass a SparkSession object for PySpark.")
     
