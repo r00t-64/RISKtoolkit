@@ -73,7 +73,7 @@ class S3ConnectionMR:
 
         return response.get("body")
 
-    def df_to_s3(self, df=None, key=None, format = 'parquet'):
+    def df_to_s3(self, df=None, key=None, format = 'csv'):
         if format == 'csv':
             buffer = io.StringIO()
             df.to_csv(buffer, index=False)
