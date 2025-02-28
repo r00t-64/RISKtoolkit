@@ -53,18 +53,21 @@ class S3ConnectionMR:
             df = pd.read_csv(response.get("Body"), encoding=encoding, nrows=nrows, dtype=dtype, usecols=usecols, chunksize=chunksize)
             return df
         elif isinstance(engine, SparkSession):
-            # Crear un archivo temporal
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".parquet")
-            temp_file.write(response.get("Body").read())  # Escribir los datos en el archivo
-            temp_file.close()  # Cerrar el archivo para que Spark pueda leerlo
+            temp_file.write(response.get("Body").read())
+            temp_file.close()
             
             try:
-                df = engine.read.parquet(temp_file.name)  # Cargar en Spark
+                df = engine.read.parquet(temp_file.name)
+                if nrows:
+                    df = df.limit(nrows)  # Aplicar límite solo si es necesario
+                
+                df = df.cache()  # Guardar en memoria
+                df.count()  # Forzar materialización
+
+                return df
             finally:
-                pass
-                #os.remove(temp_file.name)  # Eliminar el archivo después de cargarlo
-            
-            return df
+                os.remove(temp_file.name)  # Asegurar que el archivo se elimina
         else:
             raise ValueError("Invalid engine type. Use None for pandas or pass a SparkSession object for PySpark.")
     
