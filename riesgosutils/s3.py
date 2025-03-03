@@ -11,6 +11,7 @@ from boto3.dynamodb.conditions import Key
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, sum as Fsum, last_day, trunc, to_date, expr
 from delta.tables import DeltaTable
+from pyspark import StorageLevel
 
 
 logging.getLogger().setLevel(logging.INFO)
@@ -47,11 +48,17 @@ class S3ConnectionMR:
             except:
                 logging.error("Could not connect to s3 with default credentials")
 
-    def read_from_s3(self, filename, engine=None, nrows=None, dtype=None, usecols=None, chunksize=None, encoding='utf-8', header=True):
+    def read_from_s3(self, filename, engine=None, nrows=None, dtype=None, usecols=None, chunksize=None, encoding='utf-8', header=True, persistence=StorageLevel.DISK_ONLY):
+        """
+        Parámetros:
+        - persistence (StorageLevel, opcional): Nivel de persistencia para PySpark (por defecto DISK_ONLY).
+                MEMORY_AND_DISK, DISK_ONLY, MEMORY_ONLY_SER
+        """
         response = self.s3_client.get_object(Bucket=self.bucket, Key=filename)
+
         if engine is None:
-            df = pd.read_csv(response.get("Body"), encoding=encoding, nrows=nrows, dtype=dtype, usecols=usecols, chunksize=chunksize)
-            return df
+            return pd.read_csv(response.get("Body"), encoding=encoding, nrows=nrows, dtype=dtype, usecols=usecols, chunksize=chunksize)
+
         elif isinstance(engine, SparkSession):
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".parquet")
             temp_file.write(response.get("Body").read())
@@ -59,15 +66,11 @@ class S3ConnectionMR:
             
             try:
                 df = engine.read.parquet(temp_file.name)
-                if nrows:
-                    df = df.limit(nrows)  # Aplicar límite solo si es necesario
-                
-                df = df.cache()  # Guardar en memoria
-                df.count()  # Forzar materialización
+                df = df.persist(persistence)  # ✅ Aplicar persistencia según el parámetro
 
                 return df
             finally:
-                os.remove(temp_file.name)  # Asegurar que el archivo se elimina
+                os.unlink(temp_file.name)  # ✅ Eliminar archivo temporal correctamente
         else:
             raise ValueError("Invalid engine type. Use None for pandas or pass a SparkSession object for PySpark.")
     
