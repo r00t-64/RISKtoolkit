@@ -63,17 +63,15 @@ class S3ConnectionMR:
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".parquet")
             temp_file.write(response.get("Body").read())
             temp_file.close()
-            
-            try:
-                df = engine.read.parquet(temp_file.name)
-                df = df.persist(persistence)  
 
-                return df
-            finally:
-                os.unlink(temp_file.name) 
+            df = engine.read.parquet(temp_file.name)
+            df = df.persist(persistence)
+
+            print(f"⚡ Archivo temporal guardado en: {temp_file.name}")  # Mensaje de control
+            return df
         else:
             raise ValueError("Invalid engine type. Use None for pandas or pass a SparkSession object for PySpark.")
-    
+        
     def load_from_s3(self, filename, nrows=None):
         response = self.s3_client.get_object(Bucket=self.bucket, Key=filename)
 
