@@ -66,11 +66,11 @@ class S3ConnectionMR:
             
             try:
                 df = engine.read.parquet(temp_file.name)
-                df = df.persist(persistence)  # ✅ Aplicar persistencia según el parámetro
+                df = df.persist(persistence)  
 
                 return df
             finally:
-                os.unlink(temp_file.name)  # ✅ Eliminar archivo temporal correctamente
+                os.unlink(temp_file.name) 
         else:
             raise ValueError("Invalid engine type. Use None for pandas or pass a SparkSession object for PySpark.")
     
