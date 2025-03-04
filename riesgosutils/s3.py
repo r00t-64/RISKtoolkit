@@ -67,7 +67,6 @@ class S3ConnectionMR:
             df = engine.read.parquet(temp_file.name)
             df = df.persist(persistence)
 
-            print(f"⚡ Archivo temporal guardado en: {temp_file.name}")  # Mensaje de control
             return df
         else:
             raise ValueError("Invalid engine type. Use None for pandas or pass a SparkSession object for PySpark.")
