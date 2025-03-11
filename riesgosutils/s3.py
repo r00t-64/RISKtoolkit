@@ -65,6 +65,8 @@ class S3ConnectionMR:
             temp_file.close()
 
             df = engine.read.parquet(temp_file.name)
+            if nrows:
+                df = df.limit(nrows)
             df = df.persist(persistence)
 
             return df
