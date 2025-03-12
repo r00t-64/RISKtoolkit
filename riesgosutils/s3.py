@@ -57,7 +57,7 @@ class S3ConnectionMR:
         response = self.s3_client.get_object(Bucket=self.bucket, Key=filename)
 
         if engine is None:
-            return pd.read_csv(response.get("Body"), encoding=encoding, nrows=nrows, dtype=dtype, usecols=usecols, chunksize=chunksize, sep=sep , header=header)
+            return pd.read_csv(response.get("Body"), encoding=encoding, nrows=nrows, dtype=dtype, usecols=usecols, chunksize=chunksize, sep=sep )
 
         elif isinstance(engine, SparkSession):
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".parquet")
