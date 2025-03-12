@@ -48,7 +48,7 @@ class S3ConnectionMR:
             except:
                 logging.error("Could not connect to s3 with default credentials")
 
-    def read_from_s3(self, filename, engine=None, nrows=None, dtype=None, usecols=None, chunksize=None, encoding='utf-8', header=True, persistence=StorageLevel.DISK_ONLY):
+    def read_from_s3(self, filename, engine=None, nrows=None, dtype=None, usecols=None, chunksize=None, encoding='utf-8', sep=",", header=True, persistence=StorageLevel.DISK_ONLY):
         """
         Parámetros:
         - persistence (StorageLevel, opcional): Nivel de persistencia para PySpark (por defecto DISK_ONLY).
@@ -57,7 +57,7 @@ class S3ConnectionMR:
         response = self.s3_client.get_object(Bucket=self.bucket, Key=filename)
 
         if engine is None:
-            return pd.read_csv(response.get("Body"), encoding=encoding, nrows=nrows, dtype=dtype, usecols=usecols, chunksize=chunksize)
+            return pd.read_csv(response.get("Body"), encoding=encoding, nrows=nrows, dtype=dtype, usecols=usecols, chunksize=chunksize, sep=sep , header=header)
 
         elif isinstance(engine, SparkSession):
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".parquet")
@@ -254,6 +254,22 @@ class DynamoDBConnection:
         except ClientError as e:
             logging.error(f"Error scanning table {self.table.name}: {str(e)}")
             return []
+    
+    def create_table(self, table_name, partition_key):
+        """Crea una nueva tabla en DynamoDB si no existe."""
+        try:
+            table = self.dynamodb.create_table(
+                TableName=table_name,
+                KeySchema=[{'AttributeName': partition_key, 'KeyType': 'HASH'}],  # Clave primaria
+                AttributeDefinitions=[{'AttributeName': partition_key, 'AttributeType': 'S'}],
+                ProvisionedThroughput={'ReadCapacityUnits': 5, 'WriteCapacityUnits': 5}
+            )
+            table.wait_until_exists()
+            logging.info(f"Table {table_name} created successfully.")
+            return table
+        except ClientError as e:
+            logging.error(f"Error creating table {table_name}: {str(e)}")
+            return None
         
     def query_table(self, partition_key, partition_value):
         if not self.table:
