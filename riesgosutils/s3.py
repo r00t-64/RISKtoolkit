@@ -47,7 +47,6 @@ class S3ConnectionMR:
                 return s3
             except:
                 logging.error("Could not connect to s3 with default credentials")
-
     def read_from_s3(self, filename, engine=None, nrows=None, dtype=None, usecols=None, chunksize=None, encoding='utf-8', sep=",", header=True, persistence=StorageLevel.DISK_ONLY):
         """
         Parámetros:
@@ -55,16 +54,36 @@ class S3ConnectionMR:
                 MEMORY_AND_DISK, DISK_ONLY, MEMORY_ONLY_SER
         """
         response = self.s3_client.get_object(Bucket=self.bucket, Key=filename)
-
+        file_extension = filename.split(".")[-1].lower()
+        
         if engine is None:
-            return pd.read_csv(response.get("Body"), encoding=encoding, nrows=nrows, dtype=dtype, usecols=usecols, chunksize=chunksize, sep=sep )
+            if file_extension == "parquet":
+                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".parquet")
+                temp_file.write(response.get("Body").read())
+                temp_file.close()
+                
+                return pd.read_parquet(temp_file.name)
+            elif file_extension == "csv":
+                return pd.read_csv(response.get("Body"), encoding=encoding, nrows=nrows, dtype=dtype, usecols=usecols, chunksize=chunksize, sep=sep)
+            else:
+                import warnings
+                warnings.warn("Unsupported file format. Only CSV and Parquet are supported.")
+                return None
 
         elif isinstance(engine, SparkSession):
-            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".parquet")
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_extension}")
             temp_file.write(response.get("Body").read())
             temp_file.close()
 
-            df = engine.read.parquet(temp_file.name)
+            if file_extension == "parquet":
+                df = engine.read.parquet(temp_file.name)
+            elif file_extension == "csv":
+                df = engine.read.csv(temp_file.name, header=header, inferSchema=True)
+            else:
+                import warnings
+                warnings.warn("Unsupported file format. Only CSV and Parquet are supported.")
+                return None
+
             if nrows:
                 df = df.limit(nrows)
             df = df.persist(persistence)
@@ -72,6 +91,7 @@ class S3ConnectionMR:
             return df
         else:
             raise ValueError("Invalid engine type. Use None for pandas or pass a SparkSession object for PySpark.")
+
         
     def load_from_s3(self, filename, nrows=None):
         response = self.s3_client.get_object(Bucket=self.bucket, Key=filename)
