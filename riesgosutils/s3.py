@@ -4,7 +4,7 @@ import logging
 import json
 import tempfile
 
-import io,os
+import io
 from botocore.exceptions import ClientError
 from boto3.s3.transfer import TransferConfig
 from boto3.dynamodb.conditions import Key
@@ -64,7 +64,7 @@ class S3ConnectionMR:
                 
                 return pd.read_parquet(temp_file.name)
             elif file_extension == "csv":
-                return pd.read_csv(response.get("Body").read().decode(encoding), encoding=encoding, nrows=nrows, dtype=dtype, usecols=usecols, chunksize=chunksize, sep=sep)
+                return pd.read_csv(io.StringIO(response.get("Body").read().decode(encoding)), encoding=encoding, nrows=nrows, dtype=dtype, usecols=usecols, chunksize=chunksize, sep=sep)
             else:
                 import warnings
                 warnings.warn("Unsupported file format. Only CSV and Parquet are supported.")
