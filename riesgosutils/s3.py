@@ -64,7 +64,7 @@ class S3ConnectionMR:
                 
                 return pd.read_parquet(temp_file.name)
             elif file_extension == "csv":
-                return pd.read_csv(response.get("Body"), encoding=encoding, nrows=nrows, dtype=dtype, usecols=usecols, chunksize=chunksize, sep=sep)
+                return pd.read_csv(response.get("Body").read().decode(encoding), encoding=encoding, nrows=nrows, dtype=dtype, usecols=usecols, chunksize=chunksize, sep=sep)
             else:
                 import warnings
                 warnings.warn("Unsupported file format. Only CSV and Parquet are supported.")
