@@ -1,10 +1,5 @@
 import pandas as pd
-import boto3
-import logging
-import json
-import tempfile
-
-import io
+import boto3, logging, json, tempfile, io, os
 from botocore.exceptions import ClientError
 from boto3.s3.transfer import TransferConfig
 from boto3.dynamodb.conditions import Key
@@ -47,6 +42,7 @@ class S3ConnectionMR:
                 return s3
             except:
                 logging.error("Could not connect to s3 with default credentials")
+
     def read_from_s3(self, filename, engine=None, nrows=None, dtype=None, usecols=None, chunksize=None, encoding='utf-8', sep=",", header=True, persistence=StorageLevel.DISK_ONLY):
         """
         Parámetros:
@@ -162,6 +158,20 @@ class S3ConnectionMR:
 
         self.s3_client.download_file(self.bucket, key, file)
 
+    def clear_cache():
+        """
+        Elimina todos los archivos temporales Parquet generados en el directorio temporal del sistema.
+        """
+        temp_dir = tempfile.gettempdir()
+        
+        try:
+            for file in os.listdir(temp_dir):
+                if file.endswith(".parquet"):
+                    file_path = os.path.join(temp_dir, file)
+                    os.remove(file_path)
+                    print(f"Eliminado: {file_path}")
+        except Exception as e:
+            print(f"Error al limpiar caché: {e}")
 
 import boto3
 import json
