@@ -2,6 +2,8 @@ from sqlalchemy import create_engine, text
 import oracledb
 from typing import Optional
 import pymssql
+from sqlalchemy import create_engine
+import psycopg2
 
 class OracleDBConnection:
     def __init__(self, user_lc: str = '', pass_lc: str = '', sid_lc: str = '', host:str = None, port:str = None,service:str = None):
@@ -196,9 +198,6 @@ class MssqlConnection:
             self._status_code = f'MSSQL-{e.args[0]}'
             self._status_number = e.args[0]
             raise
-
-from sqlalchemy import create_engine
-import psycopg2
 
 class PostgresDBConnection:
     def __init__(self, user: str = '', password: str = '', dbname: str = '', host: str = 'localhost', port: str = '5432'):
