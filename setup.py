@@ -12,7 +12,7 @@ setup(
         'numpy',
         'exchangelib',
         'openpyxl',
-        'cx_Oracle',
+        'oracledb',
         'boto3',
         'pyspark',
         'delta-spark',
@@ -24,7 +24,7 @@ setup(
 
     ],
     author='Isaac Rivera',
-    author_email='ariveras@cajaarequipa.pe',
+    author_email='ariveras@uni.pe',
     description='Coleccion de clases y funciones recurrentes para el Departamento de Riesgos.',
     long_description=long_description,
     long_description_content_type='text/markdown',
