@@ -7,7 +7,7 @@ setup(
     version='0.1.2',
     packages=find_packages(),
     install_requires=[
-        'sqlalchemy',
+        'sqlalchemy==2.0.40',
         'pandas',
         'numpy',
         'exchangelib',
@@ -17,7 +17,10 @@ setup(
         'pyspark',
         'delta-spark',
         'pyarrow',
-        'fastparquet'
+        'fastparquet',
+        'pymssql',
+        'oracledb'
+
 
     ],
     author='Isaac Rivera',
