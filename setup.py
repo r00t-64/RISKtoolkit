@@ -19,7 +19,8 @@ setup(
         'pyarrow',
         'fastparquet',
         'pymssql',
-        'oracledb'
+        'oracledb',
+        'psycopg2'
 
 
     ],
