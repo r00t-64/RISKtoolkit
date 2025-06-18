@@ -43,7 +43,7 @@ class S3ConnectionMR:
             except:
                 logging.error("Could not connect to s3 with default credentials")
 
-    def read_from_s3(self, filename, engine=None, nrows=None, dtype=None, usecols=None, chunksize=None, encoding='utf-8', sep=",", header=True, persistence=StorageLevel.DISK_ONLY):
+    def read_from_s3(self, filename, engine=None, nrows=None, dtype=None, usecols=None,index_col=None, chunksize=None, encoding='utf-8', sep=",", header=True, persistence=StorageLevel.DISK_ONLY):
         """
         Parámetros:
         - persistence (StorageLevel, opcional): Nivel de persistencia para PySpark (por defecto DISK_ONLY).
@@ -60,7 +60,15 @@ class S3ConnectionMR:
                 
                 return pd.read_parquet(temp_file.name)
             elif file_extension == "csv":
-                return pd.read_csv(io.StringIO(response.get("Body").read().decode(encoding)), encoding=encoding, nrows=nrows, dtype=dtype, usecols=usecols, chunksize=chunksize, sep=sep)
+                return pd.read_csv(io.StringIO(response.get("Body").read().decode(encoding)), 
+                                   encoding=encoding, 
+                                   nrows=nrows, 
+                                   dtype=dtype, 
+                                   usecols=usecols, 
+                                   chunksize=chunksize, 
+                                   sep=sep,
+                                   index_col=index_col
+                                  )
             else:
                 import warnings
                 warnings.warn("Unsupported file format. Only CSV and Parquet are supported.")
