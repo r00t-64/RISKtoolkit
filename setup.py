@@ -20,7 +20,7 @@ setup(
         'fastparquet',
         'pymssql',
         'oracledb',
-        'psycopg2'
+        'psycopg2-binary'
 
 
     ],
