@@ -102,20 +102,26 @@ class S3ConnectionMR:
 
         return response.get("body")
 
-    def df_to_s3(self, df=None, key=None, format = 'csv'):
-        if format == 'csv':
+    def df_to_s3(self, df=None, key=None, index=False):
+        if df is None or key is None:
+            raise ValueError("Both 'df' and 'key' must be provided.")
+        
+        ext = os.path.splitext(key)[1].lower()  # Extrae la extensión del archivo (e.g., ".csv", ".parquet")
+    
+        if ext == '.csv':
             buffer = io.StringIO()
-            df.to_csv(buffer, index=False)
-        elif format == 'parquet':
+            df.to_csv(buffer, index=index)
+            body = buffer.getvalue()
+        elif ext == '.parquet':
             buffer = io.BytesIO()
-            df.to_parquet(buffer, index=False)
+            df.to_parquet(buffer, index=index)
+            buffer.seek(0)
+            body = buffer.read()
         else:
-            raise ValueError("Unsupported format. Use 'csv' or 'parquet'.")
-        
-        buffer.seek(0)
-        self.s3_client.put_object(Body=buffer.getvalue(), Bucket=self.bucket, Key=key)
-        
-        logging.info(f"File with {df.shape[0]} rows was written to {key}")
+            raise ValueError("Unsupported file extension. Use a key ending in '.csv' or '.parquet'.")
+    
+        self.s3_client.put_object(Body=body, Bucket=self.bucket, Key=key)
+        logging.info(f"File with {df.shape[0]} rows was written to {key} (index={index})")
 
     def s3_find_csv(self, path=None, suffix="csv"):
         objects = self.s3_client.list_objects_v2(Bucket=self.bucket)["Contents"]
