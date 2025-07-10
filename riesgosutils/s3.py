@@ -172,7 +172,7 @@ class S3ConnectionMR:
 
         self.s3_client.download_file(self.bucket, key, file)
 
-    def clear_cache():
+    def clear_cache(self,):
         """
         Elimina todos los archivos temporales Parquet generados en el directorio temporal del sistema.
         """
