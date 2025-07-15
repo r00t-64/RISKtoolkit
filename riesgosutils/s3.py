@@ -52,6 +52,8 @@ class S3ConnectionMR:
         response = self.s3_client.get_object(Bucket=self.bucket, Key=filename)
         file_extension = filename.split(".")[-1].lower()
 
+        
+        
         if file_extension not in ["csv", "parquet"]:
             import warnings
             warnings.warn("Unsupported file format. Only CSV and Parquet are supported.")
@@ -72,11 +74,14 @@ class S3ConnectionMR:
                     index_col=index_col
                 )
             elif isinstance(engine, SparkSession):
-                # Spark puede leer CSV desde un stream
-                csv_bytes = response["Body"].read()
-                csv_stream = io.BytesIO(csv_bytes)
+                # Spark necesita un archivo en disco
+                app_name = engine.sparkContext.appName.replace(" ", "_")
+                app_id = engine.sparkContext.applicationId
+                temp_file = tempfile.NamedTemporaryFile(delete=False, prefix=f"{app_name}_", suffix=".csv")
+                temp_file.write(response["Body"].read())
+                temp_file.close()
                 df = engine.read.csv(
-                    csv_stream,
+                    temp_file.name,
                     header=header,
                     inferSchema=True
                 )
@@ -86,10 +91,13 @@ class S3ConnectionMR:
             else:
                 raise ValueError("Invalid engine type. Use None for Pandas or a SparkSession object for PySpark.")
 
+
         # --- Manejo para Parquet ---
         elif file_extension == "parquet":
             # Parquet requiere guardar archivo temporal
-            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".parquet")
+            app_name = engine.sparkContext.appName.replace(" ", "_")
+            app_id = engine.sparkContext.applicationId
+            temp_file = tempfile.NamedTemporaryFile(delete=False,prefix=f"{app_name}_",  suffix=".parquet")
             temp_file.write(response["Body"].read())
             temp_file.close()
 
@@ -97,14 +105,13 @@ class S3ConnectionMR:
                 # Pandas lee Parquet desde la ruta temporal
                 return pd.read_parquet(temp_file.name, engine="auto")
             elif isinstance(engine, SparkSession):
+                
                 df = engine.read.parquet(temp_file.name)
                 if nrows:
                     df = df.limit(nrows)
                 return df.persist(persistence)
             else:
                 raise ValueError("Invalid engine type. Use None for Pandas or a SparkSession object for PySpark.")
-
-
         
     def load_from_s3(self, filename, nrows=None):
         response = self.s3_client.get_object(Bucket=self.bucket, Key=filename)
@@ -178,18 +185,17 @@ class S3ConnectionMR:
 
     def s3_download(self, file, key):
         # try:
-
         self.s3_client.download_file(self.bucket, key, file)
 
-    def clear_cache(self,):
+    def clear_cache(self,spark_session):
         """
         Elimina todos los archivos temporales Parquet generados en el directorio temporal del sistema.
         """
         temp_dir = tempfile.gettempdir()
-        
+        app_name = spark_session.sparkContext.appName.replace(" ", "_")
         try:
             for file in os.listdir(temp_dir):
-                if file.endswith(".parquet"):
+                if file.startswith(app_name):
                     file_path = os.path.join(temp_dir, file)
                     os.remove(file_path)
                     print(f"Eliminado: {file_path}")
