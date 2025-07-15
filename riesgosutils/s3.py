@@ -51,50 +51,59 @@ class S3ConnectionMR:
         """
         response = self.s3_client.get_object(Bucket=self.bucket, Key=filename)
         file_extension = filename.split(".")[-1].lower()
-        
-        if engine is None:
-            if file_extension == "parquet":
-                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".parquet")
-                temp_file.write(response.get("Body").read())
-                temp_file.close()
-                
-                return pd.read_parquet(temp_file.name)
-            elif file_extension == "csv":
-                return pd.read_csv(io.StringIO(response.get("Body").read().decode(encoding)), 
-                                   encoding=encoding, 
-                                   nrows=nrows, 
-                                   dtype=dtype, 
-                                   usecols=usecols, 
-                                   chunksize=chunksize, 
-                                   sep=sep,
-                                   index_col=index_col
-                                  )
-            else:
-                import warnings
-                warnings.warn("Unsupported file format. Only CSV and Parquet are supported.")
-                return None
 
-        elif isinstance(engine, SparkSession):
-            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_extension}")
-            temp_file.write(response.get("Body").read())
+        if file_extension not in ["csv", "parquet"]:
+            import warnings
+            warnings.warn("Unsupported file format. Only CSV and Parquet are supported.")
+            return None
+
+        # --- Manejo para CSV ---
+        if file_extension == "csv":
+            if engine is None:
+                # Pandas lee CSV directamente desde el buffer
+                return pd.read_csv(
+                    io.StringIO(response["Body"].read().decode(encoding)),
+                    encoding=encoding,
+                    nrows=nrows,
+                    dtype=dtype,
+                    usecols=usecols,
+                    chunksize=chunksize,
+                    sep=sep,
+                    index_col=index_col
+                )
+            elif isinstance(engine, SparkSession):
+                # Spark puede leer CSV desde un stream
+                csv_bytes = response["Body"].read()
+                csv_stream = io.BytesIO(csv_bytes)
+                df = engine.read.csv(
+                    csv_stream,
+                    header=header,
+                    inferSchema=True
+                )
+                if nrows:
+                    df = df.limit(nrows)
+                return df.persist(persistence)
+            else:
+                raise ValueError("Invalid engine type. Use None for Pandas or a SparkSession object for PySpark.")
+
+        # --- Manejo para Parquet ---
+        elif file_extension == "parquet":
+            # Parquet requiere guardar archivo temporal
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".parquet")
+            temp_file.write(response["Body"].read())
             temp_file.close()
 
-            if file_extension == "parquet":
+            if engine is None:
+                # Pandas lee Parquet desde la ruta temporal
+                return pd.read_parquet(temp_file.name, engine="auto")
+            elif isinstance(engine, SparkSession):
                 df = engine.read.parquet(temp_file.name)
-            elif file_extension == "csv":
-                df = engine.read.csv(temp_file.name, header=header, inferSchema=True)
+                if nrows:
+                    df = df.limit(nrows)
+                return df.persist(persistence)
             else:
-                import warnings
-                warnings.warn("Unsupported file format. Only CSV and Parquet are supported.")
-                return None
+                raise ValueError("Invalid engine type. Use None for Pandas or a SparkSession object for PySpark.")
 
-            if nrows:
-                df = df.limit(nrows)
-            df = df.persist(persistence)
-
-            return df
-        else:
-            raise ValueError("Invalid engine type. Use None for pandas or pass a SparkSession object for PySpark.")
 
         
     def load_from_s3(self, filename, nrows=None):
