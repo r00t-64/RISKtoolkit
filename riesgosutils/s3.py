@@ -43,6 +43,48 @@ class S3ConnectionMR:
             except:
                 logging.error("Could not connect to s3 with default credentials")
 
+    def scan(self, path="", recursive=False):
+        """
+        Lista archivos y "carpetas" dentro de una ruta S3.
+        
+        Args:
+            path (str): Prefijo o carpeta dentro del bucket.
+            recursive (bool): Si True lista todo el árbol recursivamente. Si False solo el primer nivel.
+
+        Returns:
+            dict: {'folders': [...], 'files': [...]}
+        """
+        try:
+            paginator = self.s3_client.get_paginator('list_objects_v2')
+            result = {'folders': set(), 'files': []}
+
+            operation_parameters = {
+                'Bucket': self.bucket,
+                'Prefix': path.rstrip('/') + '/' if path and not path.endswith('/') else path,
+                'Delimiter': '' if recursive else '/'
+            }
+
+            for page in paginator.paginate(**operation_parameters):
+                # Carpeta simulada con CommonPrefixes
+                if not recursive:
+                    for cp in page.get('CommonPrefixes', []):
+                        result['folders'].add(cp.get('Prefix'))
+
+                # Archivos
+                for obj in page.get('Contents', []):
+                    key = obj['Key']
+                    if key.endswith('/'):
+                        continue  # evitar agregar carpetas como archivos
+                    result['files'].append(key)
+
+            result['folders'] = sorted(list(result['folders']))
+            result['files'] = sorted(result['files'])
+            return result
+
+        except Exception as e:
+            logging.error(f"Error scanning S3 path '{path}': {e}")
+            return {'folders': [], 'files': []}
+    
     def read_from_s3(self, filename, engine=None, nrows=None, dtype=None, usecols=None,index_col=None, chunksize=None, encoding='utf-8', sep=",", header=True, persistence=StorageLevel.DISK_ONLY):
         """
         Parámetros:
