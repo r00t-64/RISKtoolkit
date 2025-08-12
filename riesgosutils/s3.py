@@ -42,7 +42,7 @@ class S3ConnectionMR:
                 return s3
             except:
                 logging.error("Could not connect to s3 with default credentials")
-
+                
     def scan(self, path="", recursive=False):
         """
         Lista archivos y "carpetas" dentro de una ruta S3.
@@ -84,7 +84,7 @@ class S3ConnectionMR:
         except Exception as e:
             logging.error(f"Error scanning S3 path '{path}': {e}")
             return {'folders': [], 'files': []}
-    
+        
     def read_from_s3(self, filename, engine=None, nrows=None, dtype=None, usecols=None,index_col=None, chunksize=None, encoding='utf-8', sep=",", header=True, persistence=StorageLevel.DISK_ONLY):
         """
         Parámetros:
@@ -160,26 +160,20 @@ class S3ConnectionMR:
 
         return response.get("body")
 
-    def df_to_s3(self, df=None, key=None, index=False):
-        if df is None or key is None:
-            raise ValueError("Both 'df' and 'key' must be provided.")
-        
-        ext = os.path.splitext(key)[1].lower()  # Extrae la extensión del archivo (e.g., ".csv", ".parquet")
-    
-        if ext == '.csv':
+    def df_to_s3(self, df=None, key=None, format = 'csv'):
+        if format == 'csv':
             buffer = io.StringIO()
-            df.to_csv(buffer, index=index)
-            body = buffer.getvalue()
-        elif ext == '.parquet':
+            df.to_csv(buffer, index=False)
+        elif format == 'parquet':
             buffer = io.BytesIO()
-            df.to_parquet(buffer, index=index)
-            buffer.seek(0)
-            body = buffer.read()
+            df.to_parquet(buffer, index=False)
         else:
-            raise ValueError("Unsupported file extension. Use a key ending in '.csv' or '.parquet'.")
-    
-        self.s3_client.put_object(Body=body, Bucket=self.bucket, Key=key)
-        logging.info(f"File with {df.shape[0]} rows was written to {key} (index={index})")
+            raise ValueError("Unsupported format. Use 'csv' or 'parquet'.")
+        
+        buffer.seek(0)
+        self.s3_client.put_object(Body=buffer.getvalue(), Bucket=self.bucket, Key=key)
+        
+        logging.info(f"File with {df.shape[0]} rows was written to {key}")
 
     def s3_find_csv(self, path=None, suffix="csv"):
         objects = self.s3_client.list_objects_v2(Bucket=self.bucket)["Contents"]
@@ -206,28 +200,74 @@ class S3ConnectionMR:
                 self.s3_client.upload_file(file, self.bucket, Key=key, Config=config)
         except:
             logging.error(f"The file {file} could not be uploaded to {self.bucket}")
-
-    def s3_upload_df(self, df, key, config=None) -> None:
-
+    
+    def s3_upload_obj(self, file, key, config=None) -> None:
+        """
+        Upload an object to S3
+        """
         try:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tmp_file:
-                df.to_csv(tmp_file.name, index=False)
+                self.s3_client.upload_fileobj(file, self.bucket, Key=key, Config=config)
+        except:
+            logging.error(f"The file {file} could not be uploaded to {self.bucket}")
+
+    def s3_upload_df(self, df, key, config=None, engine='csv') -> None:
+        try:
+            # Determinar extensión y guardado según engine
+            if engine.lower() == 'parquet':
+                suffix = '.parquet'
+            else:
+                suffix = '.csv'
+            
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp_file:
+                if engine.lower() == 'parquet':
+                    df.to_parquet(tmp_file.name, engine="pyarrow", index=False)
+                else:
+                    df.to_csv(tmp_file.name, index=False)
+
                 transfer_config = TransferConfig(
-                    multipart_threshold=1024 * 100,  # Default 25MB
-                    max_concurrency=10,  # Default 10 threads
-                    multipart_chunksize=1024 * 100,  # Default 25MB per part
-                    use_threads=True  # Default use threading
+                    multipart_threshold=1024 * 1024 * 25,  # 25MB
+                    max_concurrency=10,                    # Hilos concurrentes
+                    multipart_chunksize=1024 * 1024 * 25,  # 25MB por parte
+                    use_threads=True
                 )
-                
-                self.s3_client.upload_file(tmp_file.name, self.bucket, key, Config=transfer_config)
-                
-        except ClientError as e:
-            logging.error(f"The DataFrame could not be uploaded to {self.bucket}/{key}", exc_info=True)
+
+                self.s3_client.upload_file(
+                    tmp_file.name,
+                    self.bucket,
+                    key,
+                    Config=config if config else transfer_config
+                )
+
+        except ClientError:
+            logging.error(
+                f"The DataFrame could not be uploaded to {self.bucket}/{key}",
+                exc_info=True
+            )
 
 
     def s3_download(self, file, key):
         # try:
+
         self.s3_client.download_file(self.bucket, key, file)
+    
+    def s3_presigned_url(self, key, expires= 3600):
+        try:
+            if not hasattr(self, 's3_client') or not hasattr(self, 'bucket'):
+                raise AttributeError("s3_client o bucket no definidos en el objeto.")
+
+            if not key:
+                raise ValueError("El parámetro 'key' está vacío o es inválido.")
+
+            presigned_url = self.s3_client.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': self.bucket, 'Key': key},
+                ExpiresIn=expires
+            )
+            return presigned_url if presigned_url else ''
+        except Exception as e:
+            print(f"[WARN] No se pudo generar la URL prefirmada: {str(e)}")
+            return ''
+
 
     def clear_cache(self,spark_session):
         """
@@ -243,6 +283,25 @@ class S3ConnectionMR:
                     print(f"Eliminado: {file_path}")
         except Exception as e:
             print(f"Error al limpiar caché: {e}")
+            
+    def s3_presigned_url(self, key, expires= 3600):
+        try:
+            if not hasattr(self, 's3_client') or not hasattr(self, 'bucket'):
+                raise AttributeError("s3_client o bucket no definidos en el objeto.")
+
+            if not key:
+                raise ValueError("El parámetro 'key' está vacío o es inválido.")
+
+            presigned_url = self.s3_client.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': self.bucket, 'Key': key},
+                ExpiresIn=expires
+            )
+            return presigned_url if presigned_url else ''
+        except Exception as e:
+            print(f"[WARN] No se pudo generar la URL prefirmada: {str(e)}")
+            return ''
+
 
 import boto3
 import json
