@@ -94,8 +94,26 @@ class S3ConnectionMR:
         response = self.s3_client.get_object(Bucket=self.bucket, Key=filename)
         file_extension = filename.split(".")[-1].lower()
 
-        
-        
+        python_to_spark = {
+            str: StringType(),
+            int: IntegerType(),
+            float: DoubleType(),
+            "string": StringType(),
+            "int": IntegerType(),
+            "float": DoubleType(),
+            "double": DoubleType(),
+            "date": DateType(),
+            "datetime64[ns]": TimestampType()
+        }
+        def build_spark_schema(dtypes: dict):
+            fields = []
+            for col, t in dtypes.items():
+                spark_type = python_to_spark.get(t)
+                if spark_type is None:
+                    raise ValueError(f"Tipo {t} no soportado para la columna {col}")
+                fields.append(StructField(col, spark_type, True))
+            return StructType(fields)
+    
         if file_extension not in ["csv", "parquet"]:
             import warnings
             warnings.warn("Unsupported file format. Only CSV and Parquet are supported.")
@@ -122,18 +140,19 @@ class S3ConnectionMR:
                 temp_file = tempfile.NamedTemporaryFile(delete=False, prefix=f"{app_name}_", suffix=".csv")
                 temp_file.write(response["Body"].read())
                 temp_file.close()
+
+                schema = build_spark_schema(dtype) if dtype else None
                 df = engine.read.csv(
                     temp_file.name,
                     header=header,
-                    inferSchema=True
+                    inferSchema=(schema is None)
                 )
                 if nrows:
                     df = df.limit(nrows)
                 return df.persist(persistence)
             else:
                 raise ValueError("Invalid engine type. Use None for Pandas or a SparkSession object for PySpark.")
-
-
+                
         # --- Manejo para Parquet ---
         elif file_extension == "parquet":
             # Parquet requiere guardar archivo temporal
@@ -144,11 +163,15 @@ class S3ConnectionMR:
             temp_file.close()
 
             if engine is None:
-                # Pandas lee Parquet desde la ruta temporal
                 return pd.read_parquet(temp_file.name, engine="auto")
+
             elif isinstance(engine, SparkSession):
-                
                 df = engine.read.parquet(temp_file.name)
+                if dtype:  # Castea columnas después de leer
+                    for col, t in dtype.items():
+                        spark_type = python_to_spark.get(t)
+                        if spark_type:
+                            df = df.withColumn(col, df[col].cast(spark_type))
                 if nrows:
                     df = df.limit(nrows)
                 return df.persist(persistence)
@@ -445,3 +468,4 @@ class DynamoDBConnection:
         except ClientError as e:
             logging.error(f"Error querying table {self.table.name}: {str(e)}")
             return []
+
