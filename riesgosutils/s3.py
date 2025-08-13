@@ -1,10 +1,13 @@
 import pandas as pd
-import boto3, logging, json, tempfile, io, os
+import boto3, logging, json, tempfile, io, os, tempfile
 from botocore.exceptions import ClientError
 from boto3.s3.transfer import TransferConfig
 from boto3.dynamodb.conditions import Key
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, sum as Fsum, last_day, trunc, to_date, expr
+from pyspark.sql.types import (
+    StructType, StructField, StringType, IntegerType, DoubleType, DateType,TimestampType
+)
 from delta.tables import DeltaTable
 from pyspark import StorageLevel
 
@@ -468,4 +471,5 @@ class DynamoDBConnection:
         except ClientError as e:
             logging.error(f"Error querying table {self.table.name}: {str(e)}")
             return []
+
 
