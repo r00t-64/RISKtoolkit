@@ -148,6 +148,7 @@ class S3ConnectionMR:
                 df = engine.read.csv(
                     temp_file.name,
                     header=header,
+                    schema=schema,
                     inferSchema=(schema is None)
                 )
                 if nrows:
@@ -471,5 +472,6 @@ class DynamoDBConnection:
         except ClientError as e:
             logging.error(f"Error querying table {self.table.name}: {str(e)}")
             return []
+
 
 
