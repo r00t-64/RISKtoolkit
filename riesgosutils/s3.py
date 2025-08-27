@@ -240,7 +240,7 @@ class S3ConnectionMR:
     def s3_upload_df(self, df, key, config=None, engine='csv') -> None:
         try:
             # Determinar extensión
-            file_extension = filename.split(".")[-1].lower()
+            file_extension = key.split(".")[-1].lower()
             suffix = '.parquet' if file_extension == 'parquet' else '.csv'
     
             # Crear archivo temporal
@@ -479,6 +479,7 @@ class DynamoDBConnection:
         except ClientError as e:
             logging.error(f"Error querying table {self.table.name}: {str(e)}")
             return []
+
 
 
 
