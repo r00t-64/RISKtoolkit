@@ -311,7 +311,7 @@ def s3_upload_df(self, df, key, config=None, engine='csv') -> None:
         app_name = spark_session.sparkContext.appName.replace(" ", "_")
         try:
             for file in os.listdir(temp_dir):
-                if file.startswith(app_name):
+                if file.startswith(app_name) and (file.endswith(".parquet") or file.endswith(".csv")):
                     file_path = os.path.join(temp_dir, file)
                     os.remove(file_path)
                     print(f"Eliminado: {file_path}")
@@ -479,6 +479,7 @@ class DynamoDBConnection:
         except ClientError as e:
             logging.error(f"Error querying table {self.table.name}: {str(e)}")
             return []
+
 
 
 
