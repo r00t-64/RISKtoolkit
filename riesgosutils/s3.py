@@ -237,7 +237,7 @@ class S3ConnectionMR:
         except:
             logging.error(f"The file {file} could not be uploaded to {self.bucket}")
 
-    def s3_upload_df(self, df, key, config=None, engine='csv') -> None:
+    def s3_upload_df(self, df, key, config=None, engine=None) -> None:
         try:
             # Determinar extensión
             file_extension = key.split(".")[-1].lower()
@@ -479,6 +479,7 @@ class DynamoDBConnection:
         except ClientError as e:
             logging.error(f"Error querying table {self.table.name}: {str(e)}")
             return []
+
 
 
 
