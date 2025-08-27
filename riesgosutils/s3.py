@@ -237,39 +237,46 @@ class S3ConnectionMR:
         except:
             logging.error(f"The file {file} could not be uploaded to {self.bucket}")
 
-    def s3_upload_df(self, df, key, config=None, engine='csv') -> None:
-        try:
-            # Determinar extensión y guardado según engine
-            if engine.lower() == 'parquet':
-                suffix = '.parquet'
+def s3_upload_df(self, df, key, config=None, engine='csv') -> None:
+    try:
+        # Determinar extensión
+        file_extension = engine.lower()
+        suffix = '.parquet' if file_extension == 'parquet' else '.csv'
+
+        # Crear archivo temporal
+        if file_extension == 'parquet' and isinstance(engine, SparkSession):
+            app_name = engine.sparkContext.appName.replace(" ", "_")
+            app_id = engine.sparkContext.applicationId
+            temp_file = tempfile.NamedTemporaryFile(delete=False, prefix=f"{app_name}_{app_id}_", suffix=".parquet")
+            df.to_parquet(temp_file.name, engine="pyarrow", index=False)
+        else:
+            temp_file = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+            if file_extension == 'parquet':
+                df.to_parquet(temp_file.name, engine="pyarrow", index=False)
             else:
-                suffix = '.csv'
-            
-            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp_file:
-                if engine.lower() == 'parquet':
-                    df.to_parquet(tmp_file.name, engine="pyarrow", index=False)
-                else:
-                    df.to_csv(tmp_file.name, index=False)
+                df.to_csv(temp_file.name, index=False)
 
-                transfer_config = TransferConfig(
-                    multipart_threshold=1024 * 1024 * 25,  # 25MB
-                    max_concurrency=10,                    # Hilos concurrentes
-                    multipart_chunksize=1024 * 1024 * 25,  # 25MB por parte
-                    use_threads=True
-                )
+        # Configuración de transferencia S3
+        transfer_config = TransferConfig(
+            multipart_threshold=1024 * 1024 * 25,  # 25MB
+            max_concurrency=10,
+            multipart_chunksize=1024 * 1024 * 25,
+            use_threads=True
+        )
 
-                self.s3_client.upload_file(
-                    tmp_file.name,
-                    self.bucket,
-                    key,
-                    Config=config if config else transfer_config
-                )
+        # Subida a S3
+        self.s3_client.upload_file(
+            temp_file.name,
+            self.bucket,
+            key,
+            Config=config if config else transfer_config
+        )
 
-        except ClientError:
-            logging.error(
-                f"The DataFrame could not be uploaded to {self.bucket}/{key}",
-                exc_info=True
-            )
+    except ClientError:
+        logging.error(
+            f"The DataFrame could not be uploaded to {self.bucket}/{key}",
+            exc_info=True
+        )
 
 
     def s3_download(self, file, key):
@@ -472,6 +479,7 @@ class DynamoDBConnection:
         except ClientError as e:
             logging.error(f"Error querying table {self.table.name}: {str(e)}")
             return []
+
 
 
 
