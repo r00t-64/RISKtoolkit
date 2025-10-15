@@ -29,7 +29,7 @@ setup(
     description='Coleccion de clases y funciones recurrentes para el Departamento de Riesgos.',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    url='https://github.com/',
+    url='https://github.com/r00t-64/riesgosutils',
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: 2024, Propiedad de Caja Arequipa.',
@@ -37,3 +37,4 @@ setup(
     ],
     python_requires='>=3.10',
 )
+
