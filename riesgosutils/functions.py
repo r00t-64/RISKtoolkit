@@ -58,7 +58,7 @@ def db_select(cursor, query, ): # takes the request text and sends it to the dat
             return []  
 
 """
-def funcion_sql(cursor, query, parameters=None, output_type='dataframe'):
+def db_fetch(cursor, query, parameters=None, output_type='dataframe'):
     response = {"is_ok": True, "error": ""}
     output = None
 
@@ -104,7 +104,7 @@ def funcion_sql(cursor, query, parameters=None, output_type='dataframe'):
     finally:
         return output, response
 
-def proceso_sql(engine, query, parameters=None):
+def db_execute(engine, query, parameters=None):
     """
     Ejecuta sentencias SQL desde un archivo (.sql) o desde una cadena directa, manejando parámetros y control de errores.
     :param engine: Motor SQLAlchemy para ejecutar las consultas.
@@ -277,7 +277,7 @@ def funcion_sql(cursor, query, parameters=None, output_type='dataframe'):
         return output, response
 
 
-def proceso_sql(connection, query, parameters=None, sep=';'):
+def db_execute_script(connection, query, parameters=None, sep=';'):
     """
     Ejecuta sentencias SQL incluyendo bloques PL/SQL con terminación '/'
 
@@ -371,5 +371,6 @@ def proceso_sql(connection, query, parameters=None, sep=';'):
     finally:
         if 'cursor' in locals():
             cursor.close()
+
 
     return __response
