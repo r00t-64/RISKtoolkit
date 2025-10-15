@@ -3,14 +3,13 @@ from setuptools import setup, find_packages
 with open("README.md", encoding="utf-8") as f:
     long_description = f.read()
 setup(
-    name='riesgosutils',
-    version='0.1.2',
+    name='RISKtoolkit',
+    version='1.0.0',
     packages=find_packages(),
     install_requires=[
         'sqlalchemy==2.0.40',
         'pandas',
         'numpy',
-        'exchangelib',
         'openpyxl',
         'oracledb',
         'boto3',
@@ -29,7 +28,7 @@ setup(
     description='Coleccion de clases y funciones recurrentes para el Departamento de Riesgos.',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    url='https://github.com/r00t-64/riesgosutils',
+    url='https://github.com/r00t-64/RISKtoolkit',
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: 2024, Propiedad de Caja Arequipa.',

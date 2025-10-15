@@ -1,11 +1,11 @@
-# Riesgosutils
+# RISKtoolkit
 
 Coleccion de clases y funciones recurrentes para el Departamento de Riesgos.
 
 ### Instalacion Local
 
 ```bash
- pip install git+https://<TOKEN>@github.com/r00t-64/riesgosutils.git
+ pip install git+https://<TOKEN>@github.com/r00t-64/RISKtoolkit.git
 
 ```
 
