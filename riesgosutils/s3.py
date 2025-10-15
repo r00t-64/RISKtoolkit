@@ -1,6 +1,6 @@
 import pandas as pd
 import boto3, logging, json, tempfile, io, os, tempfile
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError,NoCredentialsError
 from boto3.s3.transfer import TransferConfig
 from boto3.dynamodb.conditions import Key
 from pyspark.sql import SparkSession
@@ -14,21 +14,36 @@ from pyspark import StorageLevel
 
 logging.getLogger().setLevel(logging.INFO)
 class S3ConnectionMR:
-    def __init__(self, bucket=None, client_secret=None, base_path = None):
+    def __init__(self, bucket=None, aws_access_key_id=None, aws_secret_access_key=None, client_secret=None, base_path=None):
         self.bucket = bucket
-        self.s3_client = self.get_client(client_secret)
         self.base_path = base_path
+        self.s3_client = self.get_client(
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+            client_secret=client_secret
+        )
 
     @staticmethod
-    def get_client(client_secret=None):
-        if client_secret:
+    def get_client(aws_access_key_id=None, aws_secret_access_key=None, client_secret=None):
+        # 1. Si se pasan las claves directamente
+        if aws_access_key_id and aws_secret_access_key:
+            try:
+                s3 = boto3.client(
+                    "s3",
+                    aws_access_key_id=aws_access_key_id,
+                    aws_secret_access_key=aws_secret_access_key,
+                    verify=False,
+                )
+                return s3
+            except Exception as e:
+                logging.error(f"Could not connect to s3 with provided keys: {e}")
+        # 2. Si se pasa un path a un archivo JSON
+        elif client_secret:
             try:
                 with open(client_secret) as f:
                     data = json.load(f)
-
                     ACCESS_KEY = data.get("ACCESS_KEY")
                     SECRET_KEY = data.get("SECRET_KEY")
-
                     s3 = boto3.client(
                         "s3",
                         aws_access_key_id=ACCESS_KEY,
@@ -36,15 +51,15 @@ class S3ConnectionMR:
                         verify=False,
                     )
                     return s3
-            except:
-                logging.error("Invalid crediential, s3 client not loaded!")
-
+            except Exception as e:
+                logging.error(f"Invalid credential file, s3 client not loaded! {e}")
+        # 3. Si no se pasa nada, usa credenciales por defecto
         else:
             try:
                 s3 = boto3.client("s3")
                 return s3
-            except:
-                logging.error("Could not connect to s3 with default credentials")
+            except Exception as e:
+                logging.error(f"Could not connect to s3 with default credentials: {e}")
                 
     def scan(self, path="", recursive=False):
         """
@@ -88,7 +103,7 @@ class S3ConnectionMR:
             logging.error(f"Error scanning S3 path '{path}': {e}")
             return {'folders': [], 'files': []}
         
-    def read_from_s3(self, filename, engine=None, nrows=None, dtype=None, usecols=None,index_col=None, chunksize=None, encoding='utf-8', sep=",", header=True, persistence=StorageLevel.DISK_ONLY):
+    def read_from_s3(self, filename, session=None, nrows=None, dtype=None, usecols=None,index_col=None, chunksize=None, encoding='utf-8', sep=",", header=True, persistence=StorageLevel.DISK_ONLY):
         """
         Parámetros:
         - persistence (StorageLevel, opcional): Nivel de persistencia para PySpark (por defecto DISK_ONLY).
@@ -96,7 +111,7 @@ class S3ConnectionMR:
         """
         response = self.s3_client.get_object(Bucket=self.bucket, Key=filename)
         file_extension = filename.split(".")[-1].lower()
-
+    
         python_to_spark = {
             str: StringType(),
             int: IntegerType(),
@@ -106,8 +121,9 @@ class S3ConnectionMR:
             "float": DoubleType(),
             "double": DoubleType(),
             "date": DateType(),
-            "datetime64[ns]": TimestampType()
+            "datetime64[ns]": TimestampType(),
         }
+    
         def build_spark_schema(dtypes: dict):
             fields = []
             for col, t in dtypes.items():
@@ -121,11 +137,11 @@ class S3ConnectionMR:
             import warnings
             warnings.warn("Unsupported file format. Only CSV and Parquet are supported.")
             return None
-
-        # --- Manejo para CSV ---
+    
+        # ----------- CSV -----------
         if file_extension == "csv":
-            if engine is None:
-                # Pandas lee CSV directamente desde el buffer
+            # Caso Pandas directo (None o str)
+            if session is None or isinstance(session, str):
                 return pd.read_csv(
                     io.StringIO(response["Body"].read().decode(encoding)),
                     encoding=encoding,
@@ -134,44 +150,53 @@ class S3ConnectionMR:
                     usecols=usecols,
                     chunksize=chunksize,
                     sep=sep,
-                    index_col=index_col
+                    index_col=index_col,
                 )
-            elif isinstance(engine, SparkSession):
-                # Spark necesita un archivo en disco
-                app_name = engine.sparkContext.appName.replace(" ", "_")
-                app_id = engine.sparkContext.applicationId
-                temp_file = tempfile.NamedTemporaryFile(delete=False, prefix=f"{app_name}_", suffix=".csv")
+    
+            # SparkSession
+            if isinstance(session, SparkSession):
+                prefix = f"{session.sparkContext.appName.replace(' ', '_')}_{session.sparkContext.applicationId}_"
+                temp_file = tempfile.NamedTemporaryFile(delete=False, prefix=prefix, suffix=".csv")
                 temp_file.write(response["Body"].read())
                 temp_file.close()
-
+    
                 schema = build_spark_schema(dtype) if dtype else None
-                df = engine.read.csv(
+                df = session.read.csv(
                     temp_file.name,
                     header=header,
                     schema=schema,
-                    inferSchema=(schema is None)
+                    inferSchema=(schema is None),
                 )
                 if nrows:
                     df = df.limit(nrows)
                 return df.persist(persistence)
-            else:
-                raise ValueError("Invalid engine type. Use None for Pandas or a SparkSession object for PySpark.")
-                
-        # --- Manejo para Parquet ---
+    
+            raise ValueError(
+                "Invalid session type. Use None, str or a SparkSession object."
+            )
+    
+        # ----------- PARQUET -----------
         elif file_extension == "parquet":
-            # Parquet requiere guardar archivo temporal
-            app_name = engine.sparkContext.appName.replace(" ", "_")
-            app_id = engine.sparkContext.applicationId
-            temp_file = tempfile.NamedTemporaryFile(delete=False,prefix=f"{app_name}_",  suffix=".parquet")
+            # Prefijo para archivo temporal
+            if isinstance(session, SparkSession):
+                prefix = f"{session.sparkContext.appName.replace(' ', '_')}_{session.sparkContext.applicationId}_"
+            elif isinstance(session, str):
+                prefix = f"{session}_"
+            else:
+                prefix = "anonymous_session_"
+    
+            temp_file = tempfile.NamedTemporaryFile(delete=False, prefix=prefix, suffix=".parquet")
             temp_file.write(response["Body"].read())
             temp_file.close()
-
-            if engine is None:
-                return pd.read_parquet(temp_file.name, engine="auto")
-
-            elif isinstance(engine, SparkSession):
-                df = engine.read.parquet(temp_file.name)
-                if dtype:  # Castea columnas después de leer
+    
+            # Pandas (None o str)
+            if session is None or isinstance(session, str):
+                return pd.read_parquet(temp_file.name, engine="pyarrow")
+    
+            # SparkSession
+            if isinstance(session, SparkSession):
+                df = session.read.parquet(temp_file.name)
+                if dtype:
                     for col, t in dtype.items():
                         spark_type = python_to_spark.get(t)
                         if spark_type:
@@ -179,28 +204,15 @@ class S3ConnectionMR:
                 if nrows:
                     df = df.limit(nrows)
                 return df.persist(persistence)
-            else:
-                raise ValueError("Invalid engine type. Use None for Pandas or a SparkSession object for PySpark.")
-        
+    
+            raise ValueError(
+                "Invalid session type. Use None, str or a SparkSession object."
+            )
+                
     def load_from_s3(self, filename, nrows=None):
         response = self.s3_client.get_object(Bucket=self.bucket, Key=filename)
 
         return response.get("body")
-
-    def df_to_s3(self, df=None, key=None, format = 'csv'):
-        if format == 'csv':
-            buffer = io.StringIO()
-            df.to_csv(buffer, index=False)
-        elif format == 'parquet':
-            buffer = io.BytesIO()
-            df.to_parquet(buffer, index=False)
-        else:
-            raise ValueError("Unsupported format. Use 'csv' or 'parquet'.")
-        
-        buffer.seek(0)
-        self.s3_client.put_object(Body=buffer.getvalue(), Bucket=self.bucket, Key=key)
-        
-        logging.info(f"File with {df.shape[0]} rows was written to {key}")
 
     def s3_find_csv(self, path=None, suffix="csv"):
         objects = self.s3_client.list_objects_v2(Bucket=self.bucket)["Contents"]
@@ -218,15 +230,6 @@ class S3ConnectionMR:
             logging.error(
                 f"The key '{self.bucket}/{key}' was not downloaded make sure the file exists."
             )
-
-    def s3_upload(self, file, key, config=None) -> None:
-        """
-        Upload an object to S3
-        """
-        try:
-                self.s3_client.upload_file(file, self.bucket, Key=key, Config=config)
-        except:
-            logging.error(f"The file {file} could not be uploaded to {self.bucket}")
     
     def s3_upload_obj(self, file, key, config=None) -> None:
         """
@@ -237,47 +240,80 @@ class S3ConnectionMR:
         except:
             logging.error(f"The file {file} could not be uploaded to {self.bucket}")
 
-    def s3_upload_df(self, df, key, config=None, engine=None) -> None:
-        try:
-            # Determinar extensión
-            file_extension = key.split(".")[-1].lower()
-            suffix = '.parquet' if file_extension == 'parquet' else '.csv'
-    
-            # Crear archivo temporal
-            if file_extension == 'parquet' and isinstance(engine, SparkSession):
-                app_name = engine.sparkContext.appName.replace(" ", "_")
-                app_id = engine.sparkContext.applicationId
-                temp_file = tempfile.NamedTemporaryFile(delete=False, prefix=f"{app_name}_{app_id}_", suffix=".parquet")
-                df.to_parquet(temp_file.name, engine="pyarrow", index=False)
-            else:
-                temp_file = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
-                if file_extension == 'parquet':
-                    df.to_parquet(temp_file.name, engine="pyarrow", index=False)
-                else:
-                    df.to_csv(temp_file.name, index=False)
-    
-            # Configuración de transferencia S3
-            transfer_config = TransferConfig(
-                multipart_threshold=1024 * 1024 * 25,  # 25MB
-                max_concurrency=10,
-                multipart_chunksize=1024 * 1024 * 25,
-                use_threads=True
-            )
-    
-            # Subida a S3
-            self.s3_client.upload_file(
-                temp_file.name,
-                self.bucket,
-                key,
-                Config=config if config else transfer_config
-            )
-    
-        except ClientError:
-            logging.error(
-                f"The DataFrame could not be uploaded to {self.bucket}/{key}",
-                exc_info=True
-            )
+    def df_to_s3(self, df=None, key=None, config=None, session=None):
+        """
+        Upload DataFrame to S3, using direct HTTP upload for CSVs and temp files for parquet
+        
+        Args:
+            df: pandas DataFrame or Spark DataFrame
+            key: S3 key (path/filename)
+            config: S3 transfer configuration
+            engine: SparkSession instance, string identifier, or None
+        """
+        if hasattr(df, 'toPandas'):  # Check if it's a Spark DataFrame
+            logging.info("Converting Spark DataFrame to Pandas DataFrame")
+            df = df.toPandas()
+        elif not isinstance(df, pd.DataFrame):
+            raise ValueError("Input must be either a Pandas DataFrame or Spark DataFrame")
 
+        try:
+            # Determine file extension
+            file_extension = key.split(".")[-1].lower()
+            
+            # For CSV files, use direct HTTP upload via StringIO
+            if file_extension == 'csv':
+                from io import StringIO
+                csv_buffer = StringIO()
+                df.to_csv(csv_buffer, index=False)
+                self.s3_client.put_object(
+                    Body=csv_buffer.getvalue(),
+                    Bucket=self.bucket,
+                    Key=key
+                )
+                logging.info(f"CSV file with {df.shape[0]} rows was written to {key}")
+                return
+
+            elif file_extension == 'parquet':
+                
+                # Determine prefix based on engine type
+                if isinstance(session, SparkSession):
+                    app_name = session.sparkContext.appName.replace(" ", "_")
+                    app_id = session.sparkContext.applicationId
+                    prefix = f"{app_name}_{app_id}_"
+                elif isinstance(session, str):
+                    prefix = f"{session}_"
+                else:
+                    prefix = ""
+
+                # Create temporary file
+                temp_file = tempfile.NamedTemporaryFile(delete=False, prefix=prefix, suffix=file_extension)
+                df.to_parquet(temp_file.name, engine="pyarrow", index=False)
+
+                # Configure transfer
+                transfer_config = TransferConfig(
+                    multipart_threshold=1024 * 1024 * 25,  # 25MB
+                    max_concurrency=10,
+                    multipart_chunksize=1024 * 1024 * 25,
+                    use_threads=True
+                ) if not config else config
+
+                # Upload file
+                self.s3_client.upload_file(
+                    temp_file.name,
+                    self.bucket,
+                    key,
+                    Config=transfer_config
+                )
+                logging.info(f"Parquet file was written to {key}")
+            else:
+                print(f"Unsupported file format [{file_extension}]. Use 'csv' or 'parquet'.")
+
+        except ClientError as e:
+            logging.error(f"Error uploading DataFrame to {self.bucket}/{key}: {str(e)}")
+            raise
+        finally:
+            if 'temp_file' in locals():
+                os.unlink(temp_file.name)
 
     def s3_download(self, file, key):
         # try:
@@ -302,19 +338,39 @@ class S3ConnectionMR:
             print(f"[WARN] No se pudo generar la URL prefirmada: {str(e)}")
             return ''
 
+    def download_file_from_s3(self, s3_path, local_path):
+        """Descarga un archivo desde S3 a una ruta local"""
+        try:
+            self.s3_client.download_file(self.bucket, s3_path, local_path)
+            print(f"Descargado: {s3_path} -> {local_path}")
+        except Exception as e:
+            print(f"Error descargando {s3_path}: {e}")
+            raise
 
-    def clear_cache(self,spark_session):
+    def clear_cache(self,session=None):
         """
         Elimina todos los archivos temporales Parquet generados en el directorio temporal del sistema.
         """
         temp_dir = tempfile.gettempdir()
-        app_name = spark_session.sparkContext.appName.replace(" ", "_")
+        if isinstance(session, SparkSession):
+            prefix = session.sparkContext.appName.replace(" ", "_")
+        elif isinstance(session, str):
+            prefix = session
+        else:
+            prefix = "anonymous_session"
+
         try:
             for file in os.listdir(temp_dir):
-                if file.startswith(app_name) and (file.endswith(".parquet") or file.endswith(".csv")):
-                    file_path = os.path.join(temp_dir, file)
-                    os.remove(file_path)
-                    print(f"Eliminado: {file_path}")
+                if file.endswith(".parquet") or file.endswith(".csv"):
+                    if prefix:
+                        if file.startswith(prefix):
+                            file_path = os.path.join(temp_dir, file)
+                            os.remove(file_path)
+                            print(f"Eliminado: {file_path}")
+                    else:
+                        file_path = os.path.join(temp_dir, file)
+                        os.remove(file_path)
+                        print(f"Eliminado: {file_path}")
         except Exception as e:
             print(f"Error al limpiar caché: {e}")
             
@@ -336,6 +392,50 @@ class S3ConnectionMR:
             print(f"[WARN] No se pudo generar la URL prefirmada: {str(e)}")
             return ''
 
+    def download_directory(self, s3_folder: str, local_dir: str | None = None) -> None:
+        """
+        Descarga todo el contenido de un prefijo de S3 en un directorio local.
+        """
+        if local_dir is None:
+            local_dir = os.getcwd()
+
+        try:
+            paginator = self.s3_client.get_paginator("list_objects_v2")
+            for result in paginator.paginate(Bucket=self.bucket, Prefix=s3_folder):
+                if result.get("Contents"):
+                    for file in result["Contents"]:
+                        file_key = file["Key"]
+                        # quitar el prefijo de la carpeta
+                        if file_key.startswith(s3_folder):
+                            rel_path = file_key[len(s3_folder):].lstrip("/")
+                            local_file_path = os.path.join(local_dir, rel_path)
+
+                            os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
+                            self.s3_client.download_file(self.bucket, file_key, local_file_path)
+                            print(f"Downloaded {file_key} → {local_file_path}")
+        except Exception as e:
+            print(f"[WARN] No se pudo descargar el directorio: {str(e)}")
+            return ''
+                    
+
+
+    def upload_directory_to_s3(self, local_directory: str, s3_folder: str) -> None:
+        """
+        Sube recursivamente un directorio local a S3 bajo el prefijo s3_folder.
+        """
+        for root, _, files in os.walk(local_directory):
+            for file in files:
+                local_path = os.path.join(root, file)
+                relative_path = os.path.relpath(local_path, local_directory)
+                s3_path = os.path.join(s3_folder, relative_path).replace("\\", "/")
+
+                try:
+                    self.s3_client.upload_file(local_path, self.bucket, s3_path)
+                    print(f"Upload Successful: {s3_path}")
+                except FileNotFoundError:
+                    print(f"File not found: {local_path}")
+                except NoCredentialsError:
+                    print("Credentials not available")
 
 import boto3
 import json
@@ -479,11 +579,3 @@ class DynamoDBConnection:
         except ClientError as e:
             logging.error(f"Error querying table {self.table.name}: {str(e)}")
             return []
-
-
-
-
-
-
-
-
