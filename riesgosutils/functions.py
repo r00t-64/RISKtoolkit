@@ -8,102 +8,6 @@ import re
 import oracledb
 import pandas as pd
 
-
-""" 
-def db_select(cursor, query, ): # takes the request text and sends it to the data_frame
-    response = {"is_ok": True, "error": "", "content":None}
-
-    try:
-        if query.lower().endswith(".sql"):
-            __sql_str = parse_query_file(query)
-        else:
-            if query.lower().startswith("select"):
-                __sql_str = query
-            else:
-                __sql_str = 'select * from ' + query
-        
-        cursor.execute(__sql_str)
-        __col = [column[0].lower() for column in cursor.description]
-        __df = pd.DataFrame.from_records(cursor, columns=__col) 
-        
-        if len(__df) > 0:
-            response["content"] = __df
-        else:
-            response["content"] = None
-        
-
-    except Exception as e:
-        response = {"is_ok": False, "error": str(e), "content": None}
-
-    finally:
-        return response 
-
-    def execute_query_from_file(cursor, file_sql, parameters, output_type='default'):
-        with open(file_sql, 'r', encoding='latin-1') as __file:
-            __query_template = __file.read()
-
-        __query_str = __query_template.format(**parameters)
-        cursor.execute(__query_str)
-        __result = cursor.fetchall()
-
-        if __result:
-            if output_type == 'dataframe':
-                __col_names = [column[0].lower() for column in cursor.description]
-                __df = pd.DataFrame(__result, columns=__col_names)
-                return __df  
-            else:
-                __result_list = [value for row in __result for value in row]
-                return __result_list 
-        else:
-            return []  
-
-"""
-def db_fetch(cursor, query, parameters=None, output_type='dataframe'):
-    response = {"is_ok": True, "error": ""}
-    output = None
-
-    try:
-        # Cargar SQL desde un archivo si el nombre del archivo termina en .sql
-        if query.lower().endswith(".sql"):
-            with open(query, 'r', encoding='latin-1') as file:
-                query_template = file.read()
-            # Formatear la consulta con los parámetros proporcionados
-            query_str = query_template.format(**parameters)
-        else:
-            # Determinar la cadena de consulta según el input
-            if len(query.split()) == 1:
-                # Si la consulta es una sola palabra, se asume que es el nombre de una tabla
-                query_str = 'SELECT * FROM ' + query
-            else:
-                # Si la consulta comienza con "select", se usa directamente
-                # De lo contrario, se considera una consulta válida completa
-                query_str = query if query.lower().startswith("select") else query
-
-        # Ejecutar la consulta SQL
-        cursor.execute(query_str)
-        result = cursor.fetchall()
-        # Obtener los nombres de las columnas
-        col_names = [column[0].lower() for column in cursor.description]
-
-        # Procesar el resultado según el tipo de salida solicitado
-        if output_type == 'dataframe':
-            # Crear un DataFrame, incluso si no hay filas (solo columnas)
-            output = pd.DataFrame(result, columns=col_names) if result else pd.DataFrame(columns=col_names)
-        elif output_type == 'json':
-            # Convertir el resultado a un diccionario y luego a formato JSON
-            result_dict = [dict(zip(col_names, row)) for row in result]
-            output = json.dumps(result_dict, ensure_ascii=False)
-        else:
-            # Devolver nombres de columnas más las filas como lista de listas
-            output = [col_names] + [list(row) for row in result] if result else [col_names]
-
-    except Exception as e:
-        # En caso de error, actualizar el mensaje en la respuesta
-        response = {"is_ok": False, "error": str(e)}
-
-    finally:
-        return output, response
-
 def db_execute(engine, query, parameters=None):
     """
     Ejecuta sentencias SQL desde un archivo (.sql) o desde una cadena directa, manejando parámetros y control de errores.
@@ -243,7 +147,7 @@ def insert_dataframe(engine, df, table_name, schema= "", index=False, if_exists=
 
     return __response
 
-def funcion_sql(cursor, query, parameters=None, output_type='dataframe'):
+def db_fetch(cursor, query, parameters=None, output_type='dataframe'):
     response = {"is_ok": True, "error": ""}
     output = None
 
@@ -374,3 +278,4 @@ def db_execute_script(connection, query, parameters=None, sep=';'):
 
 
     return __response
+
